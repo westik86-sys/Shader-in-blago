@@ -608,6 +608,7 @@ private struct TUILabsScaleSelector: View {
     private let labelHeight: CGFloat = 16
     private let labelSpacing: CGFloat = 4
     private let trailLifetime: TimeInterval = 0.25
+    private let edgeFadeWidth: CGFloat = 120
 
     private var range: Double {
         max(maxValue - minValue, step)
@@ -641,6 +642,7 @@ private struct TUILabsScaleSelector: View {
             VStack(spacing: labelSpacing) {
                 tickScale
                     .frame(width: proxy.size.width, height: scaleHeight)
+                    .mask(edgeFadeMask(width: proxy.size.width))
                     .clipped()
 
                 labels(selectableSpan: selectableSpan)
@@ -714,6 +716,21 @@ private struct TUILabsScaleSelector: View {
             .tracking(-0.08)
             .foregroundStyle(TUIColors.secondaryText)
             .lineLimit(1)
+    }
+
+    private func edgeFadeMask(width: CGFloat) -> some View {
+        let fadeLocation = min(edgeFadeWidth / max(width, 1), 0.5)
+
+        return LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .white, location: fadeLocation),
+                .init(color: .white, location: 1 - fadeLocation),
+                .init(color: .clear, location: 1)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
     }
 
     private func tickColor(at index: Int) -> Color {
