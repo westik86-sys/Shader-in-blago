@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @State private var activeSheet: CashbackRoute?
@@ -50,6 +51,15 @@ struct ContentView: View {
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {} label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel("Назад")
+                    .accessibilityHint("Демонстрационный элемент навигации")
+                }
+            }
             .tint(TUIColors.primaryText)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 floatingAction
@@ -478,9 +488,15 @@ private struct FundContributionView: View {
                         .frame(height: 28)
                         .background(TUIColors.neutralFill, in: Capsule())
 
-                    ContributionRuler(value: $charityShare)
-                        .frame(height: 52)
-                        .padding(.horizontal, 16)
+                    TUILabsScaleSelector(
+                        value: $charityShare,
+                        minValue: 0,
+                        maxValue: 100,
+                        step: 5,
+                        showsTrailEffect: true
+                    )
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 60)
                 }
                 .padding(.bottom, 36)
             }
@@ -510,12 +526,13 @@ private struct FundContributionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
+                FundFavoriteButton(
+                    imageName: fund.imageName,
+                    fundTitle: fund.title,
+                    isFavorite: isFavorite
+                ) {
                     isFavorite.toggle()
-                } label: {
-                    Image(systemName: isFavorite ? "star.fill" : "star")
                 }
-                .accessibilityLabel(isFavorite ? "Убрать из избранного" : "Добавить в избранное")
             }
         }
         .tint(TUIColors.primaryText)
@@ -523,42 +540,282 @@ private struct FundContributionView: View {
     }
 }
 
-private struct ContributionRuler: View {
+private struct FundFavoriteButton: View {
+    private let avatarSize: CGFloat = 44
+
+    let imageName: String
+    let fundTitle: String
+    let isFavorite: Bool
+    let action: () -> Void
+
+    private var avatar: UIImage? {
+        UIImage(named: imageName)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            if let avatar {
+                avatarIcon(avatar)
+            } else {
+                fallbackIcon
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isFavorite ? "Убрать \(fundTitle) из избранного" : "Добавить \(fundTitle) в избранное")
+    }
+
+    private func avatarIcon(_ avatar: UIImage) -> some View {
+        Image(uiImage: avatar)
+            .resizable()
+            .scaledToFill()
+            .frame(width: avatarSize, height: avatarSize)
+            .clipShape(Circle())
+            .contentShape(Circle())
+    }
+
+    private var fallbackIcon: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.08))
+
+            Circle()
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+
+            Image(systemName: isFavorite ? "star.fill" : "star")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(TUIColors.primaryText)
+        }
+        .frame(width: avatarSize, height: avatarSize)
+        .contentShape(Circle())
+    }
+}
+
+private struct TUILabsScaleSelector: View {
     @Binding var value: Double
+    let minValue: Double
+    let maxValue: Double
+    let step: Double
+    let showsTrailEffect: Bool
+
+    @State private var trailTicks: [ScaleTrailTick] = []
 
     private let tickCount = 31
+    private let selectableTickOffset = 5
+    private let selectableTickCount = 21
+    private let tickWidth: CGFloat = 2
+    private let tickSpacing: CGFloat = 10
+    private let scaleHeight: CGFloat = 40
+    private let labelHeight: CGFloat = 16
+    private let labelSpacing: CGFloat = 4
+    private let trailLifetime: TimeInterval = 0.25
+
+    private var range: Double {
+        max(maxValue - minValue, step)
+    }
+
+    private var selectedValueIndex: Int {
+        let normalized = (clampedValue - minValue) / step
+        return min(max(Int(round(normalized)), 0), selectableTickCount - 1)
+    }
+
+    private var selectedTickIndex: Int {
+        selectableTickOffset + selectedValueIndex
+    }
+
+    private var clampedValue: Double {
+        min(max(value, minValue), maxValue)
+    }
+
+    private var tickGroupWidth: CGFloat {
+        CGFloat(tickCount) * tickWidth + CGFloat(tickCount - 1) * tickSpacing
+    }
+
+    private var defaultSelectableSpan: CGFloat {
+        CGFloat(selectableTickCount - 1) * (tickWidth + tickSpacing)
+    }
 
     var body: some View {
         GeometryReader { proxy in
-            let selectedIndex = Int(round(value / 100 * Double(tickCount - 1)))
+            let selectableSpan = selectableSpan(for: proxy.size.width)
 
-            HStack(alignment: .bottom, spacing: 8) {
-                ForEach(0..<tickCount, id: \.self) { index in
-                    let isSelected = index == selectedIndex
-                    let isActive = index <= selectedIndex
-                    let isMajor = index % 10 == 0
+            VStack(spacing: labelSpacing) {
+                tickScale
+                    .frame(width: proxy.size.width, height: scaleHeight)
+                    .clipped()
 
-                    Capsule()
-                        .fill(isActive ? TUIColors.blue : Color.white.opacity(0.12))
-                        .frame(
-                            width: 2,
-                            height: isSelected ? 36 : (isMajor ? 28 : 20)
-                        )
-                }
+                labels(selectableSpan: selectableSpan)
+                    .frame(width: proxy.size.width, height: labelHeight)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { gesture in
-                        let ratio = min(max(gesture.location.x / max(proxy.size.width, 1), 0), 1)
-                        value = (round(ratio * 20) / 20) * 100
+                        updateValue(locationX: gesture.location.x, width: proxy.size.width)
                     }
             )
         }
+        .frame(height: scaleHeight + labelSpacing + labelHeight)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Доля кэшбэка")
         .accessibilityValue("\(Int(value)) процентов")
+        .onChange(of: selectedValueIndex) { oldIndex, newIndex in
+            guard oldIndex != newIndex else {
+                return
+            }
+
+            addTrail(from: oldIndex, to: newIndex)
+        }
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                value = min(clampedValue + step, maxValue)
+            case .decrement:
+                value = max(clampedValue - step, minValue)
+            @unknown default:
+                break
+            }
+        }
+    }
+
+    private var tickScale: some View {
+        ZStack(alignment: .bottom) {
+            HStack(alignment: .bottom, spacing: tickSpacing) {
+                ForEach(0..<tickCount, id: \.self) { index in
+                    Capsule()
+                        .fill(tickColor(at: index))
+                        .frame(width: tickWidth, height: tickHeight(at: index))
+                }
+            }
+
+            if showsTrailEffect {
+                TimelineView(.animation) { timeline in
+                    trailLayer(at: timeline.date)
+                }
+            }
+        }
+        .frame(width: tickGroupWidth, height: scaleHeight, alignment: .bottom)
+    }
+
+    private func labels(selectableSpan: CGFloat) -> some View {
+        ZStack {
+            scaleLabel(minValue.formattedPercentValue)
+                .offset(x: -selectableSpan / 2)
+
+            scaleLabel(((minValue + maxValue) / 2).formattedPercentValue)
+
+            scaleLabel(maxValue.formattedPercentValue)
+                .offset(x: selectableSpan / 2)
+        }
+    }
+
+    private func scaleLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 13, weight: .regular))
+            .tracking(-0.08)
+            .foregroundStyle(TUIColors.secondaryText)
+            .lineLimit(1)
+    }
+
+    private func tickColor(at index: Int) -> Color {
+        index <= selectedTickIndex ? TUIColors.blue : Color.white.opacity(0.12)
+    }
+
+    private func tickHeight(at index: Int) -> CGFloat {
+        if index == selectedTickIndex {
+            return 36
+        }
+
+        if index == selectableTickOffset
+            || index == selectableTickOffset + (selectableTickCount - 1) / 2
+            || index == selectableTickOffset + selectableTickCount - 1 {
+            return 28
+        }
+
+        return 20
+    }
+
+    private func selectableSpan(for width: CGFloat) -> CGFloat {
+        min(defaultSelectableSpan, max(tickWidth, width - 32))
+    }
+
+    private func updateValue(locationX: CGFloat, width: CGFloat) {
+        let selectableSpan = selectableSpan(for: width)
+        let startX = (width - selectableSpan) / 2
+        let progress = min(max((locationX - startX) / selectableSpan, 0), 1)
+        let rawValue = minValue + Double(progress) * range
+        let steppedValue = minValue + ((rawValue - minValue) / step).rounded() * step
+        value = min(max(steppedValue, minValue), maxValue)
+    }
+
+    private func trailLayer(at date: Date) -> some View {
+        HStack(alignment: .bottom, spacing: tickSpacing) {
+            ForEach(0..<tickCount, id: \.self) { index in
+                if let height = trailHeight(at: index, date: date) {
+                    Capsule()
+                        .fill(TUIColors.blue)
+                        .frame(width: tickWidth, height: height)
+                } else {
+                    Color.clear
+                        .frame(width: tickWidth, height: 1)
+                }
+            }
+        }
+    }
+
+    private func trailHeight(at index: Int, date: Date) -> CGFloat? {
+        let heights = trailTicks
+            .filter { $0.index == index }
+            .compactMap { trailTick -> CGFloat? in
+                let progress = min(max(date.timeIntervalSince(trailTick.createdAt) / trailLifetime, 0), 1)
+
+                guard progress < 1 else {
+                    return nil
+                }
+
+                let endHeight = tickHeight(at: index)
+                return 36 + (endHeight - 36) * CGFloat(progress)
+            }
+
+        return heights.max()
+    }
+
+    private func addTrail(from oldIndex: Int, to newIndex: Int) {
+        guard showsTrailEffect else {
+            return
+        }
+
+        let direction = newIndex > oldIndex ? 1 : -1
+        let crossedIndices = Array(stride(from: oldIndex, to: newIndex, by: direction))
+        let now = Date()
+        let newTrailTicks = crossedIndices.map { index in
+            ScaleTrailTick(
+                index: selectableTickOffset + index,
+                createdAt: now
+            )
+        }
+
+        trailTicks.append(contentsOf: newTrailTicks)
+
+        for trailTick in newTrailTicks {
+            let remainingLifetime = max(0, trailLifetime - Date().timeIntervalSince(trailTick.createdAt))
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + remainingLifetime) {
+                trailTicks.removeAll { $0.id == trailTick.id }
+            }
+        }
+    }
+}
+
+private struct ScaleTrailTick: Identifiable {
+    let id = UUID()
+    let index: Int
+    let createdAt: Date
+}
+
+private extension Double {
+    var formattedPercentValue: String {
+        let rounded = Int(self.rounded())
+        return "\(rounded)"
     }
 }
 
