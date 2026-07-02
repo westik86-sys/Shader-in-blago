@@ -496,7 +496,7 @@ private struct FundContributionView: View {
                         showsTrailEffect: true
                     )
                     .frame(maxWidth: .infinity)
-                    .frame(height: 60)
+                    .frame(height: 40)
                 }
                 .padding(.bottom, 36)
             }
@@ -598,6 +598,7 @@ private struct TUILabsScaleSelector: View {
     let showsTrailEffect: Bool
 
     @State private var trailTicks: [ScaleTrailTick] = []
+    @State private var dragStartValue: Double?
 
     private let tickCount = 31
     private let selectableTickOffset = 5
@@ -605,14 +606,8 @@ private struct TUILabsScaleSelector: View {
     private let tickWidth: CGFloat = 2
     private let tickSpacing: CGFloat = 10
     private let scaleHeight: CGFloat = 40
-    private let labelHeight: CGFloat = 16
-    private let labelSpacing: CGFloat = 4
     private let trailLifetime: TimeInterval = 0.25
     private let edgeFadeWidth: CGFloat = 120
-
-    private var range: Double {
-        max(maxValue - minValue, step)
-    }
 
     private var selectedValueIndex: Int {
         let normalized = (clampedValue - minValue) / step
@@ -623,6 +618,14 @@ private struct TUILabsScaleSelector: View {
         selectableTickOffset + selectedValueIndex
     }
 
+    private var firstSelectableTickIndex: Int {
+        selectableTickOffset
+    }
+
+    private var lastSelectableTickIndex: Int {
+        selectableTickOffset + selectableTickCount - 1
+    }
+
     private var clampedValue: Double {
         min(max(value, minValue), maxValue)
     }
@@ -631,32 +634,23 @@ private struct TUILabsScaleSelector: View {
         CGFloat(tickCount) * tickWidth + CGFloat(tickCount - 1) * tickSpacing
     }
 
-    private var defaultSelectableSpan: CGFloat {
-        CGFloat(selectableTickCount - 1) * (tickWidth + tickSpacing)
-    }
-
     var body: some View {
         GeometryReader { proxy in
-            let selectableSpan = selectableSpan(for: proxy.size.width)
-
-            VStack(spacing: labelSpacing) {
-                tickScale
-                    .frame(width: proxy.size.width, height: scaleHeight)
-                    .mask(edgeFadeMask(width: proxy.size.width))
-                    .clipped()
-
-                labels(selectableSpan: selectableSpan)
-                    .frame(width: proxy.size.width, height: labelHeight)
-            }
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { gesture in
-                        updateValue(locationX: gesture.location.x, width: proxy.size.width)
-                    }
-            )
+            tickScale(width: proxy.size.width)
+                .mask(edgeFadeMask(width: proxy.size.width))
+                .clipped()
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { gesture in
+                            updateValue(translationX: gesture.translation.width)
+                        }
+                        .onEnded { _ in
+                            dragStartValue = nil
+                        }
+                )
         }
-        .frame(height: scaleHeight + labelSpacing + labelHeight)
+        .frame(height: scaleHeight)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Доля кэшбэка")
         .accessibilityValue("\(Int(value)) процентов")
@@ -679,7 +673,7 @@ private struct TUILabsScaleSelector: View {
         }
     }
 
-    private var tickScale: some View {
+    private func tickScale(width: CGFloat) -> some View {
         ZStack(alignment: .bottom) {
             HStack(alignment: .bottom, spacing: tickSpacing) {
                 ForEach(0..<tickCount, id: \.self) { index in
@@ -696,26 +690,8 @@ private struct TUILabsScaleSelector: View {
             }
         }
         .frame(width: tickGroupWidth, height: scaleHeight, alignment: .bottom)
-    }
-
-    private func labels(selectableSpan: CGFloat) -> some View {
-        ZStack {
-            scaleLabel(minValue.formattedPercentValue)
-                .offset(x: -selectableSpan / 2)
-
-            scaleLabel(((minValue + maxValue) / 2).formattedPercentValue)
-
-            scaleLabel(maxValue.formattedPercentValue)
-                .offset(x: selectableSpan / 2)
-        }
-    }
-
-    private func scaleLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 13, weight: .regular))
-            .tracking(-0.08)
-            .foregroundStyle(TUIColors.secondaryText)
-            .lineLimit(1)
+        .offset(x: tapeOffset)
+        .frame(width: width, height: scaleHeight)
     }
 
     private func edgeFadeMask(width: CGFloat) -> some View {
@@ -734,34 +710,58 @@ private struct TUILabsScaleSelector: View {
     }
 
     private func tickColor(at index: Int) -> Color {
-        index <= selectedTickIndex ? TUIColors.blue : Color.white.opacity(0.12)
+        guard isSelectableTick(index) else {
+            return .clear
+        }
+
+        return index <= selectedTickIndex ? TUIColors.blue : Color.white.opacity(0.12)
     }
 
     private func tickHeight(at index: Int) -> CGFloat {
+        guard isSelectableTick(index) else {
+            return 1
+        }
+
         if index == selectedTickIndex {
             return 36
         }
 
-        if index == selectableTickOffset
+        if index == firstSelectableTickIndex
             || index == selectableTickOffset + (selectableTickCount - 1) / 2
-            || index == selectableTickOffset + selectableTickCount - 1 {
+            || index == lastSelectableTickIndex {
             return 28
         }
 
         return 20
     }
 
-    private func selectableSpan(for width: CGFloat) -> CGFloat {
-        min(defaultSelectableSpan, max(tickWidth, width - 32))
+    private func isSelectableTick(_ index: Int) -> Bool {
+        firstSelectableTickIndex...lastSelectableTickIndex ~= index
     }
 
-    private func updateValue(locationX: CGFloat, width: CGFloat) {
-        let selectableSpan = selectableSpan(for: width)
-        let startX = (width - selectableSpan) / 2
-        let progress = min(max((locationX - startX) / selectableSpan, 0), 1)
-        let rawValue = minValue + Double(progress) * range
+    private func updateValue(translationX: CGFloat) {
+        let startValue = dragStartValue ?? clampedValue
+
+        if dragStartValue == nil {
+            dragStartValue = startValue
+        }
+
+        let stepDelta = -translationX / tickStride
+        let rawValue = startValue + Double(stepDelta) * step
         let steppedValue = minValue + ((rawValue - minValue) / step).rounded() * step
         value = min(max(steppedValue, minValue), maxValue)
+    }
+
+    private var tickStride: CGFloat {
+        tickWidth + tickSpacing
+    }
+
+    private func tickCenterX(at index: Int) -> CGFloat {
+        CGFloat(index) * tickStride + tickWidth / 2
+    }
+
+    private var tapeOffset: CGFloat {
+        tickGroupWidth / 2 - tickCenterX(at: selectedTickIndex)
     }
 
     private func trailLayer(at date: Date) -> some View {
@@ -780,6 +780,10 @@ private struct TUILabsScaleSelector: View {
     }
 
     private func trailHeight(at index: Int, date: Date) -> CGFloat? {
+        guard isSelectableTick(index) else {
+            return nil
+        }
+
         let heights = trailTicks
             .filter { $0.index == index }
             .compactMap { trailTick -> CGFloat? in
@@ -827,13 +831,6 @@ private struct ScaleTrailTick: Identifiable {
     let id = UUID()
     let index: Int
     let createdAt: Date
-}
-
-private extension Double {
-    var formattedPercentValue: String {
-        let rounded = Int(self.rounded())
-        return "\(rounded)"
-    }
 }
 
 private struct CashbackRouteSheet: View {
