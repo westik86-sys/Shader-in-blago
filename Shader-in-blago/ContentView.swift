@@ -9,14 +9,12 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var activeSheet: CashbackRoute?
-    @State private var showingFundSelection = false
     @State private var showingDoneSummary = false
+    @State private var navigationPath: [CashbackNavigationRoute] = []
     @State private var blackShare = 100.0
     @State private var charityShare = 50.0
     @State private var selectedFund = ""
     @State private var selectedAccount = "Накопительный счет"
-
-    @Environment(\.dismiss) private var dismiss
 
     private var blackTitle: String {
         "\(Int(blackShare))% на Black"
@@ -33,7 +31,7 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ZStack {
                 TUIColors.background
                     .ignoresSafeArea()
@@ -52,27 +50,31 @@ struct ContentView: View {
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .accessibilityLabel("Назад")
-                }
-            }
             .tint(TUIColors.primaryText)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 floatingAction
             }
-            .navigationDestination(isPresented: $showingFundSelection) {
-                FundSelectionView(
-                    selectedFund: $selectedFund,
-                    charityShare: $charityShare,
-                    blackShare: $blackShare,
-                    isFlowPresented: $showingFundSelection
-                )
+            .navigationDestination(for: CashbackNavigationRoute.self) { route in
+                switch route {
+                case .fundSelection:
+                    FundSelectionView(
+                        selectedFund: $selectedFund,
+                        charityShare: $charityShare,
+                        blackShare: $blackShare
+                    ) { fund in
+                        navigationPath = [.fundSelection, .fundContribution(fund)]
+                    }
+
+                case let .fundContribution(fund):
+                    FundContributionView(
+                        fund: fund,
+                        selectedFund: $selectedFund,
+                        charityShare: $charityShare,
+                        blackShare: $blackShare
+                    ) {
+                        navigationPath.removeAll()
+                    }
+                }
             }
             .sheet(item: $activeSheet) { route in
                 CashbackRouteSheet(
@@ -131,7 +133,7 @@ struct ContentView: View {
                 subtitle: selectedFund.isEmpty ? "Можно выбрать фонд" : selectedFund,
                 showsDisclosure: true
             ) {
-                showingFundSelection = true
+                navigationPath = [.fundSelection]
             }
 
             CashbackCard(
@@ -166,6 +168,11 @@ struct ContentView: View {
         }
         .background(TUIColors.background)
     }
+}
+
+private enum CashbackNavigationRoute: Hashable {
+    case fundSelection
+    case fundContribution(CharityFund)
 }
 
 private enum CashbackRoute: String, Identifiable {
@@ -291,7 +298,7 @@ private struct FundSelectionView: View {
     @Binding var selectedFund: String
     @Binding var charityShare: Double
     @Binding var blackShare: Double
-    @Binding var isFlowPresented: Bool
+    let openFund: (CharityFund) -> Void
 
     var body: some View {
         ZStack {
@@ -310,7 +317,9 @@ private struct FundSelectionView: View {
 
                     LazyVStack(spacing: 4) {
                         ForEach(CharityFund.all) { fund in
-                            NavigationLink(value: fund) {
+                            Button {
+                                openFund(fund)
+                            } label: {
                                 CharityFundRow(fund: fund)
                             }
                             .buttonStyle(CardPressButtonStyle())
@@ -324,15 +333,6 @@ private struct FundSelectionView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(for: CharityFund.self) { fund in
-            FundContributionView(
-                fund: fund,
-                selectedFund: $selectedFund,
-                charityShare: $charityShare,
-                blackShare: $blackShare,
-                isFlowPresented: $isFlowPresented
-            )
-        }
         .tint(TUIColors.primaryText)
         .preferredColorScheme(.dark)
     }
@@ -433,7 +433,7 @@ private struct FundContributionView: View {
     @Binding var selectedFund: String
     @Binding var charityShare: Double
     @Binding var blackShare: Double
-    @Binding var isFlowPresented: Bool
+    let finishFlow: () -> Void
 
     @State private var isFavorite = true
 
@@ -490,7 +490,7 @@ private struct FundContributionView: View {
             Button {
                 selectedFund = fund.title
                 blackShare = max(0, 100 - charityShare)
-                isFlowPresented = false
+                finishFlow()
             } label: {
                 Text("Готово")
                     .font(.system(size: 17, weight: .regular))
