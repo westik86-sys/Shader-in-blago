@@ -11,10 +11,12 @@ struct ContentView: View {
     @State private var activeSheet: CashbackRoute?
     @State private var showingFundSelection = false
     @State private var showingDoneSummary = false
-    @State private var showingBackHint = false
     @State private var blackShare = 100.0
+    @State private var charityShare = 50.0
     @State private var selectedFund = ""
     @State private var selectedAccount = "Накопительный счет"
+
+    @Environment(\.dismiss) private var dismiss
 
     private var blackTitle: String {
         "\(Int(blackShare))% на Black"
@@ -38,10 +40,6 @@ struct ContentView: View {
 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {
-                        topBar
-                            .padding(.horizontal, 16)
-                            .padding(.top, 8)
-
                         header
                             .padding(.horizontal, 16)
                             .padding(.top, 36)
@@ -52,12 +50,29 @@ struct ContentView: View {
                     .padding(.bottom, 144)
                 }
             }
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel("Назад")
+                }
+            }
+            .tint(TUIColors.primaryText)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 floatingAction
             }
             .navigationDestination(isPresented: $showingFundSelection) {
-                FundSelectionView(selectedFund: $selectedFund)
+                FundSelectionView(
+                    selectedFund: $selectedFund,
+                    charityShare: $charityShare,
+                    blackShare: $blackShare,
+                    isFlowPresented: $showingFundSelection
+                )
             }
             .sheet(item: $activeSheet) { route in
                 CashbackRouteSheet(
@@ -71,11 +86,6 @@ struct ContentView: View {
                 .presentationBackground(TUIColors.card)
                 .preferredColorScheme(.dark)
             }
-            .alert("Прототип", isPresented: $showingBackHint) {
-                Button("Ок", role: .cancel) {}
-            } message: {
-                Text("В продукте эта кнопка закрывает экран выбора кэшбэка.")
-            }
             .alert("Готово", isPresented: $showingDoneSummary) {
                 Button("Ок", role: .cancel) {}
             } message: {
@@ -83,23 +93,6 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
-    }
-
-    private var topBar: some View {
-        HStack {
-            Button {
-                showingBackHint = true
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(TUIColors.primaryText)
-            }
-            .buttonStyle(GlassCircleButtonStyle())
-            .accessibilityLabel("Назад")
-
-            Spacer()
-        }
-        .frame(height: 44)
     }
 
     private var header: some View {
@@ -296,8 +289,9 @@ private struct CashbackCard: View {
 
 private struct FundSelectionView: View {
     @Binding var selectedFund: String
-
-    @Environment(\.dismiss) private var dismiss
+    @Binding var charityShare: Double
+    @Binding var blackShare: Double
+    @Binding var isFlowPresented: Bool
 
     var body: some View {
         ZStack {
@@ -306,10 +300,6 @@ private struct FundSelectionView: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 0) {
-                    topBar
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
-
                     Text("В какой фонд?")
                         .font(.system(size: 30, weight: .bold))
                         .tracking(0.36)
@@ -320,10 +310,11 @@ private struct FundSelectionView: View {
 
                     LazyVStack(spacing: 4) {
                         ForEach(CharityFund.all) { fund in
-                            CharityFundRow(fund: fund) {
-                                selectedFund = fund.title
-                                dismiss()
+                            NavigationLink(value: fund) {
+                                CharityFundRow(fund: fund)
                             }
+                            .buttonStyle(CardPressButtonStyle())
+                            .accessibilityHint("Открыть настройку кэшбэка")
                         }
                     }
                     .padding(.top, 32)
@@ -331,67 +322,56 @@ private struct FundSelectionView: View {
                 }
             }
         }
-        .toolbar(.hidden, for: .navigationBar)
-        .preferredColorScheme(.dark)
-    }
-
-    private var topBar: some View {
-        HStack {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(TUIColors.primaryText)
-            }
-            .buttonStyle(GlassCircleButtonStyle())
-            .accessibilityLabel("Назад")
-
-            Spacer()
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(for: CharityFund.self) { fund in
+            FundContributionView(
+                fund: fund,
+                selectedFund: $selectedFund,
+                charityShare: $charityShare,
+                blackShare: $blackShare,
+                isFlowPresented: $isFlowPresented
+            )
         }
-        .frame(height: 44)
+        .tint(TUIColors.primaryText)
+        .preferredColorScheme(.dark)
     }
 }
 
 private struct CharityFundRow: View {
     let fund: CharityFund
-    let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 16) {
-                Image(fund.imageName)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 56, height: 56)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        HStack(spacing: 16) {
+            Image(fund.imageName)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(fund.title)
-                        .font(.system(size: 17, weight: .regular))
-                        .tracking(-0.41)
-                        .foregroundStyle(TUIColors.primaryText)
-                        .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(fund.title)
+                    .font(.system(size: 17, weight: .regular))
+                    .tracking(-0.41)
+                    .foregroundStyle(TUIColors.primaryText)
+                    .lineLimit(1)
 
-                    Text(fund.subtitle)
-                        .font(.system(size: 13, weight: .regular))
-                        .tracking(-0.08)
-                        .foregroundStyle(TUIColors.secondaryText)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
+                Text(fund.subtitle)
+                    .font(.system(size: 13, weight: .regular))
+                    .tracking(-0.08)
+                    .foregroundStyle(TUIColors.secondaryText)
+                    .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-            .padding(.horizontal, 16)
-            .contentShape(Rectangle())
+
+            Spacer(minLength: 0)
         }
-        .buttonStyle(CardPressButtonStyle())
-        .accessibilityHint("Выбрать фонд")
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+        .padding(.horizontal, 16)
+        .contentShape(Rectangle())
     }
 }
 
-private struct CharityFund: Identifiable {
+private struct CharityFund: Identifiable, Hashable {
     let id: String
     let title: String
     let subtitle: String
@@ -448,6 +428,140 @@ private struct CharityFund: Identifiable {
     ]
 }
 
+private struct FundContributionView: View {
+    let fund: CharityFund
+    @Binding var selectedFund: String
+    @Binding var charityShare: Double
+    @Binding var blackShare: Double
+    @Binding var isFlowPresented: Bool
+
+    @State private var isFavorite = true
+
+    private var percentText: String {
+        "\(Int(charityShare))%"
+    }
+
+    private var estimatedMonthlyText: String {
+        "Примерно \(Int(charityShare * 3)) ₽ в месяц"
+    }
+
+    var body: some View {
+        ZStack {
+            TUIColors.background
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Text("Сколько кэшбэка переводить\nежемесячно?")
+                    .font(.system(size: 20, weight: .bold))
+                    .tracking(0.38)
+                    .foregroundStyle(TUIColors.primaryText)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .padding(.top, 36)
+
+                Spacer(minLength: 72)
+
+                Text(percentText)
+                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                    .tracking(-1)
+                    .foregroundStyle(TUIColors.primaryText)
+                    .shadow(color: Color.white.opacity(0.45), radius: 22, x: 0, y: 1)
+
+                Spacer(minLength: 132)
+
+                VStack(spacing: 24) {
+                    Text(estimatedMonthlyText)
+                        .font(.system(size: 13, weight: .semibold))
+                        .tracking(-0.08)
+                        .foregroundStyle(TUIColors.primaryText)
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .background(TUIColors.neutralFill, in: Capsule())
+
+                    ContributionRuler(value: $charityShare)
+                        .frame(height: 52)
+                        .padding(.horizontal, 16)
+                }
+                .padding(.bottom, 36)
+            }
+            .padding(.bottom, 104)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Button {
+                selectedFund = fund.title
+                blackShare = max(0, 100 - charityShare)
+                isFlowPresented = false
+            } label: {
+                Text("Готово")
+                    .font(.system(size: 17, weight: .regular))
+                    .tracking(-0.41)
+                    .foregroundStyle(TUIColors.primaryText)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(TUIColors.neutralFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(ScaleButtonStyle())
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+            .background(TUIColors.background)
+        }
+        .navigationTitle(fund.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isFavorite.toggle()
+                } label: {
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                }
+                .accessibilityLabel(isFavorite ? "Убрать из избранного" : "Добавить в избранное")
+            }
+        }
+        .tint(TUIColors.primaryText)
+        .preferredColorScheme(.dark)
+    }
+}
+
+private struct ContributionRuler: View {
+    @Binding var value: Double
+
+    private let tickCount = 31
+
+    var body: some View {
+        GeometryReader { proxy in
+            let selectedIndex = Int(round(value / 100 * Double(tickCount - 1)))
+
+            HStack(alignment: .bottom, spacing: 8) {
+                ForEach(0..<tickCount, id: \.self) { index in
+                    let isSelected = index == selectedIndex
+                    let isActive = index <= selectedIndex
+                    let isMajor = index % 10 == 0
+
+                    Capsule()
+                        .fill(isActive ? TUIColors.blue : Color.white.opacity(0.12))
+                        .frame(
+                            width: 2,
+                            height: isSelected ? 36 : (isMajor ? 28 : 20)
+                        )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        let ratio = min(max(gesture.location.x / max(proxy.size.width, 1), 0), 1)
+                        value = (round(ratio * 20) / 20) * 100
+                    }
+            )
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Доля кэшбэка")
+        .accessibilityValue("\(Int(value)) процентов")
+    }
+}
+
 private struct CashbackRouteSheet: View {
     let route: CashbackRoute
     @Binding var blackShare: Double
@@ -469,50 +583,46 @@ private struct CashbackRouteSheet: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(route.sheetTitle)
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(TUIColors.primaryText)
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 24) {
+                Text(route.sheetSubtitle)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(TUIColors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    Text(route.sheetSubtitle)
-                        .font(.system(size: 15, weight: .regular))
-                        .foregroundStyle(TUIColors.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                content
 
-                Spacer()
+                Spacer(minLength: 0)
 
                 Button {
                     dismiss()
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(TUIColors.primaryText)
+                    Text("Выбрать")
+                        .font(.system(size: 17, weight: .regular))
+                        .tracking(-0.41)
+                        .foregroundStyle(TUIColors.textOnAccent)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(TUIColors.accentYellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(GlassCircleButtonStyle(size: 36))
-                .accessibilityLabel("Закрыть")
+                .buttonStyle(ScaleButtonStyle())
             }
-
-            content
-
-            Spacer(minLength: 0)
-
-            Button {
-                dismiss()
-            } label: {
-                Text("Выбрать")
-                    .font(.system(size: 17, weight: .regular))
-                    .tracking(-0.41)
-                    .foregroundStyle(TUIColors.textOnAccent)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(TUIColors.accentYellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .padding(20)
+            .background(TUIColors.card)
+            .navigationTitle(route.sheetTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Закрыть")
+                }
             }
-            .buttonStyle(ScaleButtonStyle())
+            .tint(TUIColors.primaryText)
         }
-        .padding(20)
         .background(TUIColors.card)
     }
 
@@ -624,23 +734,6 @@ private struct CharityIcon: View {
     }
 }
 
-private struct GlassCircleButtonStyle: ButtonStyle {
-    var size: CGFloat = 44
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .frame(width: size, height: size)
-            .background(.ultraThinMaterial, in: Circle())
-            .overlay(
-                Circle()
-                    .stroke(.white.opacity(0.08), lineWidth: 1)
-            )
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .opacity(configuration.isPressed ? 0.78 : 1)
-            .animation(.snappy(duration: 0.16), value: configuration.isPressed)
-    }
-}
-
 private struct CardPressButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -667,6 +760,7 @@ private enum TUIColors {
     static let secondaryText = Color(hex: 0x9299A2)
     static let tertiaryText = Color.white.opacity(0.3)
     static let textOnAccent = Color(hex: 0x333333)
+    static let neutralFill = Color.white.opacity(0.1)
     static let accentYellow = Color(hex: 0xFFDD2D)
     static let blue = Color(hex: 0x428BF9)
     static let magenta = Color(hex: 0xF83DAD)
