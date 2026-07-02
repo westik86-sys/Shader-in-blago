@@ -9,10 +9,11 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var activeSheet: CashbackRoute?
+    @State private var showingFundSelection = false
     @State private var showingDoneSummary = false
     @State private var showingBackHint = false
     @State private var blackShare = 100.0
-    @State private var selectedFund = "Фонд помощи детям"
+    @State private var selectedFund = ""
     @State private var selectedAccount = "Накопительный счет"
 
     private var blackTitle: String {
@@ -25,7 +26,8 @@ struct ContentView: View {
         }
 
         let charityShare = max(0, 100 - Int(blackShare))
-        return "\(Int(blackShare))% на Black, \(charityShare)% — в \(selectedFund.lowercased())."
+        let fundName = selectedFund.isEmpty ? "выбранный фонд" : selectedFund.lowercased()
+        return "\(Int(blackShare))% на Black, \(charityShare)% — в \(fundName)."
     }
 
     var body: some View {
@@ -53,6 +55,9 @@ struct ContentView: View {
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 floatingAction
+            }
+            .navigationDestination(isPresented: $showingFundSelection) {
+                FundSelectionView(selectedFund: $selectedFund)
             }
             .sheet(item: $activeSheet) { route in
                 CashbackRouteSheet(
@@ -98,19 +103,22 @@ struct ContentView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .center, spacing: 12) {
             Text("Куда зачислять кэшбэк?")
                 .font(.system(size: 30, weight: .bold))
                 .tracking(0.36)
                 .foregroundStyle(TUIColors.primaryText)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text("Можно переводить часть в фонд,\nа остальное — на выбранный счет")
                 .font(.system(size: 17, weight: .regular))
                 .tracking(-0.41)
                 .foregroundStyle(TUIColors.primaryText)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var cards: some View {
@@ -127,10 +135,10 @@ struct ContentView: View {
             CashbackCard(
                 route: .charity,
                 title: "Благотворительность",
-                subtitle: selectedFund == "Фонд помощи детям" ? "Можно выбрать фонд" : selectedFund,
+                subtitle: selectedFund.isEmpty ? "Можно выбрать фонд" : selectedFund,
                 showsDisclosure: true
             ) {
-                activeSheet = .charity
+                showingFundSelection = true
             }
 
             CashbackCard(
@@ -284,6 +292,160 @@ private struct CashbackCard: View {
             }
         }
     }
+}
+
+private struct FundSelectionView: View {
+    @Binding var selectedFund: String
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack {
+            TUIColors.background
+                .ignoresSafeArea()
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    topBar
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+
+                    Text("В какой фонд?")
+                        .font(.system(size: 30, weight: .bold))
+                        .tracking(0.36)
+                        .foregroundStyle(TUIColors.primaryText)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 40)
+
+                    LazyVStack(spacing: 4) {
+                        ForEach(CharityFund.all) { fund in
+                            CharityFundRow(fund: fund) {
+                                selectedFund = fund.title
+                                dismiss()
+                            }
+                        }
+                    }
+                    .padding(.top, 32)
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .preferredColorScheme(.dark)
+    }
+
+    private var topBar: some View {
+        HStack {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(TUIColors.primaryText)
+            }
+            .buttonStyle(GlassCircleButtonStyle())
+            .accessibilityLabel("Назад")
+
+            Spacer()
+        }
+        .frame(height: 44)
+    }
+}
+
+private struct CharityFundRow: View {
+    let fund: CharityFund
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                Image(fund.imageName)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(fund.title)
+                        .font(.system(size: 17, weight: .regular))
+                        .tracking(-0.41)
+                        .foregroundStyle(TUIColors.primaryText)
+                        .lineLimit(1)
+
+                    Text(fund.subtitle)
+                        .font(.system(size: 13, weight: .regular))
+                        .tracking(-0.08)
+                        .foregroundStyle(TUIColors.secondaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .padding(.horizontal, 16)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(CardPressButtonStyle())
+        .accessibilityHint("Выбрать фонд")
+    }
+}
+
+private struct CharityFund: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let imageName: String
+
+    init(title: String, subtitle: String, imageName: String) {
+        self.id = title
+        self.title = title
+        self.subtitle = subtitle
+        self.imageName = imageName
+    }
+
+    static let all = [
+        CharityFund(
+            title: "Вера: Т-Банк удвоит вашу помощь",
+            subtitle: "Помощь тяжелобольным взрослым и детям по всей России",
+            imageName: "FundVera"
+        ),
+        CharityFund(
+            title: "Фонд Лапа Дружбы",
+            subtitle: "Фонд помощи бездомным животным",
+            imageName: "FundLapaDruzhby"
+        ),
+        CharityFund(
+            title: "БФ Котодетки",
+            subtitle: "Помощь бездомным животным",
+            imageName: "FundKotodetki"
+        ),
+        CharityFund(
+            title: "Собаки, Которые Любят",
+            subtitle: "Помощь бездомным животным (собаки и . коты)",
+            imageName: "FundSobaki"
+        ),
+        CharityFund(
+            title: "Помощь бездомным беспородным животным",
+            subtitle: "Помощь бездомным беспородным животным",
+            imageName: "FundHomelessAnimals"
+        ),
+        CharityFund(
+            title: "Фонд Защиты Городских Животных",
+            subtitle: "Помощь животным",
+            imageName: "FundCityAnimals"
+        ),
+        CharityFund(
+            title: "АНО Центр помощи Заступник",
+            subtitle: "Помощь детям в критических ситуациях",
+            imageName: "FundZastupnik"
+        ),
+        CharityFund(
+            title: "БФ Дальше",
+            subtitle: "Помощь женщинам с раком груди",
+            imageName: "FundDalshe"
+        )
+    ]
 }
 
 private struct CashbackRouteSheet: View {
