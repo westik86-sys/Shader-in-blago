@@ -447,10 +447,6 @@ private struct FundContributionView: View {
 
     @State private var isFavorite = true
 
-    private var percentText: String {
-        "\(Int(charityShare))%"
-    }
-
     private var estimatedMonthlyText: String {
         "Примерно \(Int(charityShare * 3)) ₽ в месяц"
     }
@@ -473,11 +469,7 @@ private struct FundContributionView: View {
 
                 Spacer(minLength: 72)
 
-                Text(percentText)
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
-                    .tracking(-1)
-                    .foregroundStyle(TUIColors.primaryText)
-                    .shadow(color: Color.white.opacity(0.55), radius: 22, x: 0, y: 1)
+                PercentValueText(value: Int(charityShare))
 
                 Spacer(minLength: 132)
 
@@ -540,6 +532,30 @@ private struct FundContributionView: View {
         }
         .tint(TUIColors.primaryText)
         .preferredColorScheme(.dark)
+    }
+}
+
+private struct PercentValueText: View {
+    let value: Int
+
+    private let font = Font.system(size: 48, weight: .bold, design: .rounded)
+
+    var body: some View {
+        Text("100%")
+            .font(font)
+            .tracking(-1)
+            .monospacedDigit()
+            .hidden()
+            .overlay {
+                Text("\(value)%")
+                    .font(font)
+                    .tracking(-1)
+                    .monospacedDigit()
+                    .foregroundStyle(TUIColors.primaryText)
+            }
+            .shadow(color: Color.white.opacity(0.55), radius: 22, x: 0, y: 1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(value) процентов")
     }
 }
 
