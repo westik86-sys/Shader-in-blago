@@ -446,17 +446,40 @@ private struct FundContributionView: View {
     let finishFlow: () -> Void
 
     @State private var isFavorite = true
+    @State private var percentCenter: CGPoint = .zero
+    @State private var hasPercentCenter = false
+    @State private var displayProgress: Float = 0.0
+    @State private var lastPulseTick: Int = -1
+    @State private var pulseBoost: Float = 0.0
+    @State private var breatheBoost: Float = 0.0
+    @State private var shockStartDate: Date?
+    @State private var shockBreatheBoost: Float = 0.0
 
     private var estimatedMonthlyText: String {
         "Примерно \(Int(charityShare * 3)) ₽ в месяц"
     }
 
+    private var charityPercent: Int {
+        min(max(Int(charityShare.rounded()), 0), 100)
+    }
+
+    private var palette: CharityRipplePalette {
+        CharityRipplePalette.colors(for: charityPercent)
+    }
+
+    private let shaderSettings = CharityRippleShaderSettings()
+    private let shockDuration: TimeInterval = 1.1
+    private let shockWidth: Float = 0.4025
+    private let shockIntensity: Float = 0.48
+    private let shockBreatheBoostValue: Float = 0.35
     private let sliderHorizontalInset: CGFloat = 20
 
     var body: some View {
         ZStack {
             TUIColors.background
                 .ignoresSafeArea()
+
+            shaderBackground
 
             VStack(spacing: 0) {
                 Text("Сколько кэшбэка переводить\nежемесячно?")
@@ -469,7 +492,21 @@ private struct FundContributionView: View {
 
                 Spacer(minLength: 72)
 
-                PercentValueText(value: Int(charityShare))
+                PercentValueText(value: charityPercent)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: RippleCenterPreferenceKey.self,
+                                value: CGPoint(
+                                    x: proxy.frame(in: .global).midX,
+                                    y: proxy.frame(in: .global).midY
+                                )
+                            )
+                        }
+                    }
+                    .onTapGesture {
+                        triggerShaderShock()
+                    }
 
                 Spacer(minLength: 132)
 
@@ -515,7 +552,6 @@ private struct FundContributionView: View {
             .padding(.horizontal, 16)
             .padding(.top, 14)
             .padding(.bottom, 8)
-            .background(TUIColors.background)
         }
         .navigationTitle(fund.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -532,6 +568,109 @@ private struct FundContributionView: View {
         }
         .tint(TUIColors.primaryText)
         .preferredColorScheme(.dark)
+        .onPreferenceChange(RippleCenterPreferenceKey.self) { point in
+            if let point {
+                percentCenter = point
+                hasPercentCenter = true
+            }
+        }
+        .onChange(of: charityShare) { _, newValue in
+            syncShaderState(for: Int(newValue.rounded()), animated: true, allowsPulse: true)
+        }
+        .onAppear {
+            syncShaderState(for: charityPercent, animated: false, allowsPulse: false)
+            lastPulseTick = (charityPercent / 5) * 5
+        }
+    }
+
+    @ViewBuilder
+    private var shaderBackground: some View {
+        if #available(iOS 17.0, *) {
+            CharityRippleShaderBackground(
+                percentCenter: percentCenter,
+                hasPercentCenter: hasPercentCenter,
+                progress: displayProgress,
+                pulseBoost: pulseBoost,
+                breatheBoost: breatheBoost + shockBreatheBoost,
+                shockStartDate: shockStartDate,
+                shockDuration: Float(shockDuration),
+                shockWidth: shockWidth,
+                shockIntensity: shockIntensity,
+                donationValue: charityPercent,
+                settings: shaderSettings,
+                baseColor: palette.base,
+                glowColor: palette.glow,
+                edgeColor: palette.edge
+            )
+            .ignoresSafeArea()
+        }
+    }
+
+    private func syncShaderState(for rawValue: Int, animated: Bool, allowsPulse: Bool) {
+        let value = min(max(rawValue, 0), 100)
+        let progress = shaderProgress(for: value)
+
+        if animated {
+            withAnimation(.easeInOut(duration: 0.6)) {
+                displayProgress = progress
+            }
+        } else {
+            displayProgress = progress
+        }
+
+        if allowsPulse {
+            triggerPulseIfNeeded(for: value)
+            triggerBreatheBoostIfNeeded(for: value)
+        }
+    }
+
+    private func shaderProgress(for value: Int) -> Float {
+        if value < 10 {
+            return Float(value) / 100.0
+        }
+
+        let normalizedValue = Float(value - 10) / 90.0
+        return 0.1 + normalizedValue * 0.9
+    }
+
+    private func triggerPulseIfNeeded(for value: Int) {
+        let tick = (value / 5) * 5
+        guard tick != lastPulseTick else {
+            return
+        }
+
+        lastPulseTick = tick
+        let maxBoost = shaderSettings.pulseStrength * 2.5
+        pulseBoost = min(pulseBoost + shaderSettings.pulseStrength, maxBoost)
+        withAnimation(.easeOut(duration: Double(shaderSettings.pulseDecay)).delay(Double(shaderSettings.pulseDelay))) {
+            pulseBoost = 0.0
+        }
+    }
+
+    private func triggerBreatheBoostIfNeeded(for value: Int) {
+        guard value >= 90 else {
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            breatheBoost = value == 100 ? 0.1 : 0.05
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.easeOut(duration: 0.4)) {
+                breatheBoost = 0.0
+            }
+        }
+    }
+
+    private func triggerShaderShock() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        shockStartDate = Date()
+        shockBreatheBoost = shockBreatheBoostValue
+
+        withAnimation(.easeOut(duration: shockDuration)) {
+            shockBreatheBoost = 0.0
+        }
     }
 }
 
