@@ -477,7 +477,7 @@ private struct FundContributionView: View {
                     .font(.system(size: 48, weight: .bold, design: .rounded))
                     .tracking(-1)
                     .foregroundStyle(TUIColors.primaryText)
-                    .shadow(color: Color.white.opacity(0.45), radius: 22, x: 0, y: 1)
+                    .shadow(color: Color.white.opacity(0.55), radius: 22, x: 0, y: 1)
 
                 Spacer(minLength: 132)
 
@@ -801,7 +801,7 @@ private struct TUILabsScaleSelector: View {
             ForEach(0..<tickCount, id: \.self) { index in
                 if let height = trailHeight(at: index, date: date) {
                     Capsule()
-                        .fill(TUIColors.blue)
+                        .fill(tickColor(at: index))
                         .frame(width: tickWidth, height: height)
                 } else {
                     Color.clear
