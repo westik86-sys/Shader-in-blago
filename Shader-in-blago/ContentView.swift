@@ -34,8 +34,7 @@ struct ContentView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             ZStack {
-                TUIColors.background
-                    .ignoresSafeArea()
+                TUIScreenBackground()
 
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {
@@ -176,7 +175,7 @@ struct ContentView: View {
             .padding(.top, 14)
             .padding(.bottom, 8)
         }
-        .background(TUIColors.background)
+        .background(TUIColors.screenUnderlay)
     }
 }
 
@@ -312,8 +311,7 @@ private struct FundSelectionView: View {
 
     var body: some View {
         ZStack {
-            TUIColors.background
-                .ignoresSafeArea()
+            TUIScreenBackground()
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 0) {
@@ -476,8 +474,7 @@ private struct FundContributionView: View {
 
     var body: some View {
         ZStack {
-            TUIColors.background
-                .ignoresSafeArea()
+            TUIScreenBackground()
 
             shaderBackground
 
@@ -1212,7 +1209,8 @@ private struct ScaleButtonStyle: ButtonStyle {
 
 private enum TUIColors {
     static let background = Color.black
-    static let card = Color(hex: 0x1C1C1E)
+    static let screenUnderlay = Color(hex: 0x1C1C1E)
+    static let card = Color(hex: 0x2C2C2E)
     static let baseAlt = Color(hex: 0x333333)
     static let primaryText = Color(hex: 0xF6F7F8)
     static let secondaryText = Color(hex: 0x9299A2)
@@ -1222,6 +1220,16 @@ private enum TUIColors {
     static let accentYellow = Color(hex: 0xFFDD2D)
     static let blue = Color(hex: 0x428BF9)
     static let magenta = Color(hex: 0xF83DAD)
+}
+
+private struct TUIScreenBackground: View {
+    var body: some View {
+        ZStack {
+            TUIColors.background
+            TUIColors.screenUnderlay
+        }
+        .ignoresSafeArea()
+    }
 }
 
 private extension Color {
