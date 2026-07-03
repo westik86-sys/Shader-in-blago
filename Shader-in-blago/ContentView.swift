@@ -455,6 +455,8 @@ private struct FundContributionView: View {
         "Примерно \(Int(charityShare * 3)) ₽ в месяц"
     }
 
+    private let sliderHorizontalInset: CGFloat = 20
+
     var body: some View {
         ZStack {
             TUIColors.background
@@ -497,6 +499,7 @@ private struct FundContributionView: View {
                     )
                     .frame(maxWidth: .infinity)
                     .frame(height: 40)
+                    .padding(.horizontal, sliderHorizontalInset)
                 }
                 .padding(.bottom, 36)
             }
@@ -600,38 +603,42 @@ private struct TUILabsScaleSelector: View {
     @State private var trailTicks: [ScaleTrailTick] = []
     @State private var dragStartValue: Double?
 
-    private let tickCount = 31
-    private let selectableTickOffset = 5
-    private let selectableTickCount = 21
+    private let edgePaddingTickCount = 5
+    private let rangeTickCount = 35
     private let tickWidth: CGFloat = 2
-    private let tickSpacing: CGFloat = 10
+    private let minimumTickStride: CGFloat = 12
+    private let selectableScaleHorizontalInset: CGFloat = 20
     private let scaleHeight: CGFloat = 40
     private let trailLifetime: TimeInterval = 0.25
     private let edgeFadeWidth: CGFloat = 120
 
+    private var tickCount: Int {
+        rangeTickCount + edgePaddingTickCount * 2
+    }
+
+    private var valueStepCount: Int {
+        max(Int(round((maxValue - minValue) / step)) + 1, 1)
+    }
+
     private var selectedValueIndex: Int {
         let normalized = (clampedValue - minValue) / step
-        return min(max(Int(round(normalized)), 0), selectableTickCount - 1)
+        return min(max(Int(round(normalized)), 0), valueStepCount - 1)
     }
 
     private var selectedTickIndex: Int {
-        selectableTickOffset + selectedValueIndex
+        tickIndex(forValueIndex: selectedValueIndex)
     }
 
     private var firstSelectableTickIndex: Int {
-        selectableTickOffset
+        edgePaddingTickCount
     }
 
     private var lastSelectableTickIndex: Int {
-        selectableTickOffset + selectableTickCount - 1
+        edgePaddingTickCount + rangeTickCount - 1
     }
 
     private var clampedValue: Double {
         min(max(value, minValue), maxValue)
-    }
-
-    private var tickGroupWidth: CGFloat {
-        CGFloat(tickCount) * tickWidth + CGFloat(tickCount - 1) * tickSpacing
     }
 
     var body: some View {
@@ -643,7 +650,7 @@ private struct TUILabsScaleSelector: View {
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { gesture in
-                            updateValue(translationX: gesture.translation.width)
+                            updateValue(translationX: gesture.translation.width, width: proxy.size.width)
                         }
                         .onEnded { _ in
                             dragStartValue = nil
@@ -659,7 +666,10 @@ private struct TUILabsScaleSelector: View {
                 return
             }
 
-            addTrail(from: oldIndex, to: newIndex)
+            addTrail(
+                from: tickIndex(forValueIndex: oldIndex),
+                to: tickIndex(forValueIndex: newIndex)
+            )
         }
         .accessibilityAdjustableAction { direction in
             switch direction {
@@ -675,7 +685,7 @@ private struct TUILabsScaleSelector: View {
 
     private func tickScale(width: CGFloat) -> some View {
         ZStack(alignment: .bottom) {
-            HStack(alignment: .bottom, spacing: tickSpacing) {
+            HStack(alignment: .bottom, spacing: tickSpacing(for: width)) {
                 ForEach(0..<tickCount, id: \.self) { index in
                     Capsule()
                         .fill(tickColor(at: index))
@@ -685,12 +695,12 @@ private struct TUILabsScaleSelector: View {
 
             if showsTrailEffect {
                 TimelineView(.animation) { timeline in
-                    trailLayer(at: timeline.date)
+                    trailLayer(at: timeline.date, width: width)
                 }
             }
         }
-        .frame(width: tickGroupWidth, height: scaleHeight, alignment: .bottom)
-        .offset(x: tapeOffset)
+        .frame(width: tickGroupWidth(for: width), height: scaleHeight, alignment: .bottom)
+        .offset(x: tapeOffset(for: width))
         .frame(width: width, height: scaleHeight)
     }
 
@@ -726,9 +736,8 @@ private struct TUILabsScaleSelector: View {
             return 36
         }
 
-        if index == firstSelectableTickIndex
-            || index == selectableTickOffset + (selectableTickCount - 1) / 2
-            || index == lastSelectableTickIndex {
+        let distanceFromSelected = abs(index - selectedTickIndex)
+        if distanceFromSelected > 0 && distanceFromSelected.isMultiple(of: 12) {
             return 28
         }
 
@@ -739,33 +748,56 @@ private struct TUILabsScaleSelector: View {
         firstSelectableTickIndex...lastSelectableTickIndex ~= index
     }
 
-    private func updateValue(translationX: CGFloat) {
+    private func updateValue(translationX: CGFloat, width: CGFloat) {
         let startValue = dragStartValue ?? clampedValue
 
         if dragStartValue == nil {
             dragStartValue = startValue
         }
 
-        let stepDelta = -translationX / tickStride
+        let stepDelta = -translationX / pointsPerValueStep(for: width)
         let rawValue = startValue + Double(stepDelta) * step
         let steppedValue = minValue + ((rawValue - minValue) / step).rounded() * step
         value = min(max(steppedValue, minValue), maxValue)
     }
 
-    private var tickStride: CGFloat {
-        tickWidth + tickSpacing
+    private func tickSpacing(for width: CGFloat) -> CGFloat {
+        max(0, tickStride(for: width) - tickWidth)
     }
 
-    private func tickCenterX(at index: Int) -> CGFloat {
-        CGFloat(index) * tickStride + tickWidth / 2
+    private func tickStride(for width: CGFloat) -> CGFloat {
+        let fittedStride = (width - selectableScaleHorizontalInset * 2) / CGFloat(rangeTickCount - 1)
+        return max(minimumTickStride, fittedStride)
     }
 
-    private var tapeOffset: CGFloat {
-        tickGroupWidth / 2 - tickCenterX(at: selectedTickIndex)
+    private func pointsPerValueStep(for width: CGFloat) -> CGFloat {
+        tickStride(for: width) * visualTicksPerValueStep
     }
 
-    private func trailLayer(at date: Date) -> some View {
-        HStack(alignment: .bottom, spacing: tickSpacing) {
+    private var visualTicksPerValueStep: CGFloat {
+        CGFloat(max(rangeTickCount - 1, 1)) / CGFloat(max(valueStepCount - 1, 1))
+    }
+
+    private func tickIndex(forValueIndex valueIndex: Int) -> Int {
+        let progress = CGFloat(valueIndex) / CGFloat(max(valueStepCount - 1, 1))
+        let rangeTickIndex = Int(round(progress * CGFloat(rangeTickCount - 1)))
+        return firstSelectableTickIndex + rangeTickIndex
+    }
+
+    private func tickGroupWidth(for width: CGFloat) -> CGFloat {
+        tickWidth + CGFloat(tickCount - 1) * tickStride(for: width)
+    }
+
+    private func tickCenterX(at index: Int, width: CGFloat) -> CGFloat {
+        CGFloat(index) * tickStride(for: width) + tickWidth / 2
+    }
+
+    private func tapeOffset(for width: CGFloat) -> CGFloat {
+        tickGroupWidth(for: width) / 2 - tickCenterX(at: selectedTickIndex, width: width)
+    }
+
+    private func trailLayer(at date: Date, width: CGFloat) -> some View {
+        HStack(alignment: .bottom, spacing: tickSpacing(for: width)) {
             ForEach(0..<tickCount, id: \.self) { index in
                 if let height = trailHeight(at: index, date: date) {
                     Capsule()
@@ -810,7 +842,7 @@ private struct TUILabsScaleSelector: View {
         let now = Date()
         let newTrailTicks = crossedIndices.map { index in
             ScaleTrailTick(
-                index: selectableTickOffset + index,
+                index: index,
                 createdAt: now
             )
         }
