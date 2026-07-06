@@ -93,6 +93,7 @@ static float3 desaturateColor(float3 color, float amount) {
     float transitionExpand = transitionElapsed >= 0.0 ? smoothstep(0.0, 1.0, transitionT) : 0.0;
     transitionExpand = pow(transitionExpand, 0.72) * transitionIntensity;
     transitionExpand = clamp(transitionExpand, 0.0, 1.0);
+    float transitionDarken = transitionElapsed >= 0.0 ? smoothstep(0.48, 0.88, transitionT) : 0.0;
     float maxX = max(center.x, 1.0 - center.x);
     float maxY = max(center.y, 1.0 - center.y) * invAr;
     float maxRadius = length(float2(maxX, maxY));
@@ -200,7 +201,8 @@ static float3 desaturateColor(float3 color, float amount) {
     float baseTopMix = darkBaseMix * (1.0 - isLightMode);
     baseTopMix = clamp(baseTopMix, 0.0, 1.0);
     float3 lightModeTopColor = desaturateColor(baseColor, 0.1);
-    float3 baseTopColor = mix(float3(1.0), lightModeTopColor, isLightMode);
+    float3 darkModeTopColor = mix(float3(1.0), mix(baseColor, glowColor, 0.24), transitionExpand);
+    float3 baseTopColor = mix(darkModeTopColor, lightModeTopColor, isLightMode);
     float3 verticalBaseColor = mix(baseColor, baseTopColor, baseTopMix);
     float3 rippleColor = verticalBaseColor * brightness;
 
@@ -272,11 +274,8 @@ static float3 desaturateColor(float3 color, float amount) {
     float3 noiseColor = float3(0.0);
     finalColor = mix(finalColor, noiseColor, noiseField * noiseStrengthScaled);
     if (transitionElapsed >= 0.0) {
-        float3 goldFlash = mix(glowColor, float3(1.0, 0.87, 0.18), 0.62);
-        float3 whiteGoldFlash = mix(goldFlash, float3(1.0), 0.18);
-        float flashFill = smoothstep(0.58, 1.0, transitionT);
-        finalColor += goldFlash * transitionPulse * 0.22;
-        finalColor = mix(finalColor, whiteGoldFlash, clamp(flashFill * transitionExpand * 0.78, 0.0, 1.0));
+        float finalDim = transitionDarken;
+        finalColor = mix(finalColor, resolvedBackground, finalDim);
     }
 
     return half4(half3(finalColor), half(1.0)) * color.a;
