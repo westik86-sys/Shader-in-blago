@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import AVFoundation
 
 struct ContentView: View {
     @State private var activeSheet: CashbackRoute?
@@ -437,6 +438,8 @@ private struct CharityFund: Identifiable, Hashable {
 }
 
 private struct FundContributionView: View {
+    @Environment(\.dismiss) private var dismiss
+
     let fund: CharityFund
     @Binding var selectedFund: String
     @Binding var charityShare: Double
@@ -508,23 +511,10 @@ private struct FundContributionView: View {
                 doneButton
             }
         }
-        .navigationTitle(isShowingSuccess || isCompletionTransitionActive ? "" : fund.title)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(isShowingSuccess || isCompletionTransitionActive)
-        .toolbar {
-            if !isShowingSuccess && !isCompletionTransitionActive {
-                ToolbarItem(placement: .topBarTrailing) {
-                    FundFavoriteButton(
-                        imageName: fund.imageName,
-                        fundTitle: fund.title,
-                        isFavorite: isFavorite
-                    ) {
-                        isFavorite.toggle()
-                    }
-                }
-            }
-        }
-        .toolbar(isShowingSuccess || isCompletionTransitionActive ? .hidden : .visible, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .tint(TUIColors.primaryText)
         .preferredColorScheme(.dark)
         .onPreferenceChange(RippleCenterPreferenceKey.self) { point in
@@ -549,6 +539,8 @@ private struct FundContributionView: View {
             shaderBackground
 
             VStack(spacing: 0) {
+                contributionTopBar
+
                 Text("Сколько кэшбэка переводить\nежемесячно?")
                     .font(.system(size: 20, weight: .bold))
                     .tracking(0.38)
@@ -596,6 +588,44 @@ private struct FundContributionView: View {
             .padding(.bottom, 24)
             .opacity(contributionControlsOpacity)
         }
+    }
+
+    private var contributionTopBar: some View {
+        ZStack {
+            Text(fund.title)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(TUIColors.primaryText)
+                .lineLimit(1)
+                .padding(.horizontal, 72)
+
+            HStack(spacing: 0) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(TUIColors.primaryText)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isCompletionTransitionActive)
+                .accessibilityLabel("Назад")
+
+                Spacer()
+
+                FundFavoriteButton(
+                    imageName: fund.imageName,
+                    fundTitle: fund.title,
+                    isFavorite: isFavorite
+                ) {
+                    isFavorite.toggle()
+                }
+                .disabled(isCompletionTransitionActive)
+            }
+        }
+        .frame(height: 44)
+        .padding(.horizontal, 8)
     }
 
     private var doneButton: some View {
@@ -825,6 +855,11 @@ private struct FundSuccessView: View {
     let charityShare: Double
     let close: () -> Void
 
+    private let buttonHeight: CGFloat = 56
+    private let buttonHorizontalPadding: CGFloat = 16
+    private let buttonVerticalPadding: CGFloat = 14
+    private let textToButtonSpacing: CGFloat = 64
+
     private var charityPercent: Int {
         min(max(Int(charityShare.rounded()), 0), 100)
     }
@@ -852,56 +887,131 @@ private struct FundSuccessView: View {
 
     var body: some View {
         ZStack {
-            TUIColors.background
-                .ignoresSafeArea()
+            TUIScreenBackground()
 
             GeometryReader { proxy in
-                let imageWidth = min(proxy.size.width, 402)
-                let imageHeight = imageWidth * 424 / 402
+                let videoSide = min(proxy.size.width, 550)
+                let buttonUnderlayHeight = proxy.safeAreaInsets.bottom + buttonHeight + buttonVerticalPadding * 2
 
-                Image("SuccessHearts")
-                    .resizable()
-                    .frame(width: imageWidth, height: imageHeight)
+                OneShotVideoView(resourceName: "SuccessHearts", fileExtension: "mp4")
+                    .frame(width: videoSide, height: videoSide)
+                    .clipped()
                     .position(
                         x: proxy.size.width / 2,
-                        y: max(imageHeight / 2, proxy.size.height / 2 - 80)
+                        y: max(videoSide / 2, proxy.size.height / 2 - 80)
                     )
 
-                Text(successMessage)
-                    .font(.system(size: 17, weight: .semibold))
-                    .tracking(-0.41)
-                    .foregroundStyle(TUIColors.primaryText)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(width: min(338, max(0, proxy.size.width - 64)))
+                TUIColors.screenUnderlay
+                    .frame(width: proxy.size.width, height: buttonUnderlayHeight)
                     .position(
                         x: proxy.size.width / 2,
-                        y: max(proxy.size.height - 202, proxy.size.height * 0.68)
+                        y: proxy.size.height - buttonUnderlayHeight / 2
                     )
+
+                VStack(spacing: textToButtonSpacing) {
+                    Text(successMessage)
+                        .font(.system(size: 17, weight: .semibold))
+                        .tracking(-0.41)
+                        .foregroundStyle(TUIColors.primaryText)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(width: min(338, max(0, proxy.size.width - 64)))
+
+                    Button(action: close) {
+                        Text("Хорошо")
+                            .font(.system(size: 17, weight: .regular))
+                            .tracking(-0.41)
+                            .foregroundStyle(TUIColors.textOnAccent)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: buttonHeight)
+                            .background(TUIColors.accentYellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    .buttonStyle(ScaleButtonStyle())
+                    .padding(.horizontal, buttonHorizontalPadding)
+                }
+                .padding(.bottom, proxy.safeAreaInsets.bottom + buttonVerticalPadding)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
             }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Button(action: close) {
-                Text("Хорошо")
-                    .font(.system(size: 17, weight: .regular))
-                    .tracking(-0.41)
-                    .foregroundStyle(TUIColors.textOnAccent)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(TUIColors.accentYellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(ScaleButtonStyle())
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 14)
-            .background(TUIColors.background)
         }
         .navigationTitle("")
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .tint(TUIColors.primaryText)
         .preferredColorScheme(.dark)
+    }
+}
+
+private struct OneShotVideoView: UIViewRepresentable {
+    let resourceName: String
+    let fileExtension: String
+
+    func makeUIView(context: Context) -> OneShotVideoUIView {
+        let view = OneShotVideoUIView()
+        view.configure(resourceName: resourceName, fileExtension: fileExtension)
+        return view
+    }
+
+    func updateUIView(_ uiView: OneShotVideoUIView, context: Context) {
+        uiView.configure(resourceName: resourceName, fileExtension: fileExtension)
+    }
+}
+
+private final class OneShotVideoUIView: UIView {
+    private let playerLayer = AVPlayerLayer()
+    private var player: AVPlayer?
+    private var currentURL: URL?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        playerLayer.videoGravity = .resizeAspectFill
+        layer.addSublayer(playerLayer)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        playerLayer.frame = bounds
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil {
+            player?.pause()
+        } else {
+            player?.play()
+        }
+    }
+
+    func configure(resourceName: String, fileExtension: String) {
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: fileExtension) else {
+            playerLayer.player = nil
+            player = nil
+            currentURL = nil
+            return
+        }
+
+        guard url != currentURL else {
+            if window != nil {
+                player?.play()
+            }
+            return
+        }
+
+        currentURL = url
+        let playerItem = AVPlayerItem(url: url)
+        let videoPlayer = AVPlayer(playerItem: playerItem)
+
+        videoPlayer.isMuted = true
+        videoPlayer.actionAtItemEnd = .pause
+
+        player = videoPlayer
+        playerLayer.player = videoPlayer
+        videoPlayer.play()
     }
 }
 
