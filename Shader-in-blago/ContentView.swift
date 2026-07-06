@@ -501,17 +501,14 @@ private struct FundContributionView: View {
             if isShowingSuccess {
                 FundSuccessView(
                     fund: fund,
-                    charityShare: charityShare,
-                    close: finishFlow
+                    charityShare: charityShare
                 )
                 .opacity(successScreenOpacity)
                 .transition(.opacity)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !isShowingSuccess {
-                doneButton
-            }
+            completionBottomAction
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -652,6 +649,40 @@ private struct FundContributionView: View {
         .padding(.bottom, 8)
     }
 
+    private var completionBottomAction: some View {
+        ZStack {
+            TUIColors.screenUnderlay
+                .frame(height: 78)
+
+            if isShowingSuccess {
+                successBottomAction
+                    .opacity(successScreenOpacity)
+            } else {
+                doneButton
+            }
+        }
+        .background(TUIColors.screenUnderlay)
+    }
+
+    private var successBottomAction: some View {
+        VStack(spacing: 0) {
+            Button(action: finishFlow) {
+                Text("Хорошо")
+                    .font(.system(size: 17, weight: .regular))
+                    .tracking(-0.41)
+                    .foregroundStyle(TUIColors.textOnAccent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(TUIColors.accentYellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(ScaleButtonStyle())
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
+        }
+        .background(TUIColors.screenUnderlay)
+    }
+
     @ViewBuilder
     private var estimatedMonthlyChip: some View {
         HStack(spacing: 4) {
@@ -749,7 +780,8 @@ private struct FundContributionView: View {
         }
 
         let remainingTransitionDuration = max(0, completionTransitionDuration - completionSuccessRevealDelay)
-        DispatchQueue.main.asyncAfter(deadline: .now() + remainingTransitionDuration) {
+        let cleanupDelay = max(remainingTransitionDuration, completionSuccessFadeDuration)
+        DispatchQueue.main.asyncAfter(deadline: .now() + cleanupDelay) {
             isCompletionTransitionActive = false
             completionTransitionStartDate = nil
             pulseBoost = 0.0
@@ -862,15 +894,10 @@ private struct FundContributionView: View {
 private struct FundSuccessView: View {
     let fund: CharityFund
     let charityShare: Double
-    let close: () -> Void
 
-    @State private var successTextHeight: CGFloat = SuccessTextHeightPreferenceKey.defaultValue
-
-    private let buttonHeight: CGFloat = 56
-    private let buttonHorizontalPadding: CGFloat = 16
-    private let buttonTopPadding: CGFloat = 14
-    private let buttonBottomPadding: CGFloat = 8
     private let textToButtonSpacing: CGFloat = 64
+    private let bottomActionTopPadding: CGFloat = 14
+    private let successTextReservedHeight: CGFloat = 66
     private let navigationBarHeight: CGFloat = 44
 
     private var charityPercent: Int {
@@ -904,8 +931,8 @@ private struct FundSuccessView: View {
 
             GeometryReader { proxy in
                 let videoSide = min(proxy.size.width, 550)
-                let textBottomInset = max(0, textToButtonSpacing - buttonTopPadding)
-                let textTopY = proxy.size.height - textBottomInset - successTextHeight
+                let textBottomInset = max(0, textToButtonSpacing - bottomActionTopPadding)
+                let textTopY = proxy.size.height - textBottomInset - successTextReservedHeight
                 let navigationBarBottomY = proxy.safeAreaInsets.top + navigationBarHeight
                 let videoCenterY = max(videoSide / 2, (navigationBarBottomY + textTopY) / 2)
 
@@ -928,61 +955,16 @@ private struct FundSuccessView: View {
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(width: min(338, max(0, proxy.size.width - 64)))
-                        .background {
-                            GeometryReader { textProxy in
-                                Color.clear.preference(
-                                    key: SuccessTextHeightPreferenceKey.self,
-                                    value: textProxy.size.height
-                                )
-                            }
-                        }
                 }
                 .padding(.bottom, textBottomInset)
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
             }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            successBottomAction
         }
         .navigationTitle("")
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .tint(TUIColors.primaryText)
         .preferredColorScheme(.dark)
-        .onPreferenceChange(SuccessTextHeightPreferenceKey.self) { height in
-            guard height > 0, abs(successTextHeight - height) > 0.5 else {
-                return
-            }
-
-            successTextHeight = height
-        }
-    }
-
-    private var successBottomAction: some View {
-        VStack(spacing: 0) {
-            Button(action: close) {
-                Text("Хорошо")
-                    .font(.system(size: 17, weight: .regular))
-                    .tracking(-0.41)
-                    .foregroundStyle(TUIColors.textOnAccent)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: buttonHeight)
-                    .background(TUIColors.accentYellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(ScaleButtonStyle())
-            .padding(.horizontal, buttonHorizontalPadding)
-            .padding(.top, buttonTopPadding)
-            .padding(.bottom, buttonBottomPadding)
-        }
-        .background(TUIColors.screenUnderlay)
-    }
-}
-
-private struct SuccessTextHeightPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 44
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
 
