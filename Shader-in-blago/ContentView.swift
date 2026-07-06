@@ -479,6 +479,7 @@ private struct FundContributionView: View {
     private let completionTransitionDuration: TimeInterval = 1.18
     private let completionSuccessRevealDelay: TimeInterval = 1.08
     private let completionFlashFadeDuration: TimeInterval = 0.32
+    private let completionControlsFadeDuration: TimeInterval = 0.26
     private let completionPulseBoostValue: Float = 0.46
     private let completionBreatheBoostValue: Float = 0.34
     private let sliderHorizontalInset: CGFloat = 20
@@ -705,10 +706,7 @@ private struct FundContributionView: View {
         isCompletionTransitionActive = true
         isCompletionFlashOverlayVisible = false
         completionFlashOverlayOpacity = 0.0
-
-        withAnimation(.easeOut(duration: 0.18)) {
-            contributionControlsOpacity = 0.0
-        }
+        contributionControlsOpacity = 1.0
 
         withAnimation(.easeInOut(duration: 0.46)) {
             displayProgress = 1.0
@@ -724,6 +722,17 @@ private struct FundContributionView: View {
             withAnimation(.easeOut(duration: 0.48)) {
                 pulseBoost = completionPulseBoostValue * 0.42
                 breatheBoost = completionBreatheBoostValue * 0.55
+            }
+        }
+
+        let controlsFadeDelay = max(0, completionSuccessRevealDelay - completionControlsFadeDuration - 0.04)
+        DispatchQueue.main.asyncAfter(deadline: .now() + controlsFadeDelay) {
+            guard isCompletionTransitionActive else {
+                return
+            }
+
+            withAnimation(.easeOut(duration: completionControlsFadeDuration)) {
+                contributionControlsOpacity = 0.0
             }
         }
 
