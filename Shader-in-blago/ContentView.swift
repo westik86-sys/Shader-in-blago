@@ -492,7 +492,7 @@ private struct FundContributionView: View {
     private let completionControlsFadeDuration: TimeInterval = 0.3
     private let completionPercentFadeDelay: TimeInterval = 0.0
     private let completionPercentFadeDuration: TimeInterval = 0.18
-    private let completionPercentYOffset: CGFloat = 4
+    private let completionPercentYOffset: CGFloat = 6
     private let completionPercentYOffsetDuration: TimeInterval = 0.45
     private let sliderHorizontalInset: CGFloat = 20
 
