@@ -130,6 +130,23 @@ static float3 desaturateColor(float3 color, float amount) {
     p = float2(center.x - uv.x, (center.y - uv.y) * invAr);
     angle = atan2(p.y, p.x);
 
+    float transitionWaveWindow = 0.0;
+    float transitionWaveSigned = 0.0;
+    float transitionWaveBand = 0.0;
+    float transitionWaveShape = 0.0;
+    if (transitionElapsed >= 0.0) {
+        transitionWaveWindow = smoothstep(0.32, 0.62, transitionT) * (1.0 - smoothstep(0.96, 1.0, transitionT));
+        transitionWaveWindow *= transitionIntensity;
+
+        float transitionRadial = length(p) / max(maxRadius, 0.001);
+        float transitionWavePhase = transitionRadial * 28.0 - transitionT * 24.0;
+        transitionWaveSigned = sin(transitionWavePhase);
+        float transitionWaveSoft = transitionWaveSigned * 0.5 + 0.5;
+        transitionWaveSoft = smoothstep(0.0, 1.0, transitionWaveSoft);
+        transitionWaveBand = mix(0.22, 1.0, transitionWaveSoft) * transitionWaveWindow * 0.62;
+        transitionWaveShape = transitionWaveSigned * transitionWaveWindow * (0.006 + transitionExpand * 0.008);
+    }
+
     float distortionFactor = 1.0 + totalDistortion * 0.195;
     float2 baseSuperellipseSize = float2(coreWidth, coreHeight) * breathe * distortionFactor;
     float2 safeBaseSuperellipseSize = max(baseSuperellipseSize, float2(0.001));
@@ -161,7 +178,7 @@ static float3 desaturateColor(float3 color, float amount) {
     float coverScale = max(max(cornerScaleTL, cornerScaleTR), max(cornerScaleBL, cornerScaleBR)) * 1.12;
     float2 expandedSuperellipseSize = baseSuperellipseSize * coverScale;
     float2 superellipseSize = mix(baseSuperellipseSize, expandedSuperellipseSize, transitionExpand);
-    superellipseSize *= 1.0 + transitionPulse * 0.08;
+    superellipseSize *= 1.0 + transitionPulse * 0.08 + transitionWaveShape;
 
     float distToOval = sdSuperellipse(p, superellipseSize, coreRoundness);
     float dist = length(p);
@@ -174,6 +191,7 @@ static float3 desaturateColor(float3 color, float amount) {
     waveNorm = pow(waveNorm, 1.5);
     float brightness = (brightnessBase * energy) + waveNorm * (waveAmpParam * energy);
     brightness += transitionPulse * 0.28 + transitionExpand * 0.34;
+    brightness += transitionWaveBand * (0.18 + transitionExpand * 0.22);
 
     float isLightMode = clamp(isLightModeParam, 0.0, 1.0);
     float topZone = 1.0 - smoothstep(0.04, 0.62, uvOriginal.y);
@@ -195,6 +213,7 @@ static float3 desaturateColor(float3 color, float amount) {
     glowIntensityScaled += climax * climaxStrength;
     glowIntensityScaled *= breathe;
     glowIntensityScaled += transitionPulse * 0.22 + transitionExpand * 0.48;
+    glowIntensityScaled += transitionWaveBand * 0.18;
     float glowField = smoothstep(glowSizeScaled, 0.0, max(distToOval, 0.0));
     glowField = pow(glowField, 1.5) * glowIntensityScaled;
 
@@ -214,6 +233,8 @@ static float3 desaturateColor(float3 color, float amount) {
     float3 rayColor = mix(glowColor, edgeColor, 0.6);
 
     float3 colorWithGlow = rippleColor * breathe + finalGlowColor * glowField + rayColor * rayField;
+    float3 transitionWaveColor = mix(glowColor, float3(1.0, 0.84, 0.24), 0.48);
+    colorWithGlow += transitionWaveColor * transitionWaveBand * ovalMask * (0.16 + transitionExpand * 0.22);
     float3 expandedCoreColor = mix(ovalColor, colorWithGlow * (1.0 + transitionExpand * 0.18), transitionExpand);
     float3 colorBeforeFade = mix(colorWithGlow, expandedCoreColor, ovalMask);
 
