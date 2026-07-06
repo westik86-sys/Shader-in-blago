@@ -468,6 +468,9 @@ private struct FundContributionView: View {
     @State private var completionDimOverlayOpacity = 0.0
     @State private var successScreenOpacity = 0.0
     @State private var contributionControlsOpacity = 1.0
+    @State private var shaderPaletteStart = CharityRipplePalette.colors(for: 0)
+    @State private var shaderPaletteEnd = CharityRipplePalette.colors(for: 0)
+    @State private var shaderPaletteTransitionStartDate: Date?
 
     private var estimatedMonthlyText: String {
         "Примерно \(Int(charityShare * 3)) ₽ в месяц"
@@ -477,11 +480,8 @@ private struct FundContributionView: View {
         min(max(Int(charityShare.rounded()), 0), 100)
     }
 
-    private var palette: CharityRipplePalette {
-        CharityRipplePalette.colors(for: charityPercent)
-    }
-
     private let shaderSettings = CharityRippleShaderSettings()
+    private let shaderPaletteTransitionDuration: TimeInterval = 0.35
     private let shockDuration: TimeInterval = 1.1
     private let shockWidth: Float = 0.4025
     private let shockIntensity: Float = 0.48
@@ -711,9 +711,10 @@ private struct FundContributionView: View {
                 transitionDuration: Float(completionTransitionDuration),
                 donationValue: charityPercent,
                 settings: shaderSettings,
-                baseColor: palette.base,
-                glowColor: palette.glow,
-                edgeColor: palette.edge
+                paletteStart: shaderPaletteStart,
+                paletteEnd: shaderPaletteEnd,
+                paletteTransitionStartDate: shaderPaletteTransitionStartDate,
+                paletteTransitionDuration: Float(shaderPaletteTransitionDuration)
             )
             .ignoresSafeArea()
         }
@@ -795,6 +796,8 @@ private struct FundContributionView: View {
         let value = min(max(rawValue, 0), 100)
         let progress = shaderProgress(for: value)
 
+        syncShaderPalette(for: value, animated: animated)
+
         if animated {
             withAnimation(.easeInOut(duration: 0.6)) {
                 displayProgress = progress
@@ -807,6 +810,32 @@ private struct FundContributionView: View {
             triggerPulseIfNeeded(for: value)
             triggerBreatheBoostIfNeeded(for: value)
         }
+    }
+
+    private func syncShaderPalette(for value: Int, animated: Bool) {
+        let targetPalette = CharityRipplePalette.colors(for: value)
+        guard animated else {
+            shaderPaletteStart = targetPalette
+            shaderPaletteEnd = targetPalette
+            shaderPaletteTransitionStartDate = nil
+            return
+        }
+
+        let now = Date()
+        shaderPaletteStart = currentShaderPalette(at: now)
+        shaderPaletteEnd = targetPalette
+        shaderPaletteTransitionStartDate = now
+    }
+
+    private func currentShaderPalette(at date: Date) -> CharityRipplePalette {
+        guard let startDate = shaderPaletteTransitionStartDate else {
+            return shaderPaletteEnd
+        }
+
+        let duration = max(shaderPaletteTransitionDuration, 0.001)
+        let rawProgress = Float(date.timeIntervalSince(startDate) / duration)
+        let easedProgress = smoothstep(rawProgress)
+        return shaderPaletteStart.interpolated(to: shaderPaletteEnd, progress: easedProgress)
     }
 
     private func shaderProgress(for value: Int) -> Float {
@@ -856,6 +885,11 @@ private struct FundContributionView: View {
         withAnimation(.easeOut(duration: shockDuration)) {
             shockBreatheBoost = 0.0
         }
+    }
+
+    private func smoothstep(_ value: Float) -> Float {
+        let t = min(max(value, 0.0), 1.0)
+        return t * t * (3.0 - 2.0 * t)
     }
 }
 

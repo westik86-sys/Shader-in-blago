@@ -21,6 +21,15 @@ struct CharityRipplePalette {
     let glow: SIMD3<Float>
     let edge: SIMD3<Float>
 
+    func interpolated(to target: CharityRipplePalette, progress: Float) -> CharityRipplePalette {
+        let t = min(max(progress, 0.0), 1.0)
+        return CharityRipplePalette(
+            base: Self.mix(base, target.base, t),
+            glow: Self.mix(glow, target.glow, t),
+            edge: Self.mix(edge, target.edge, t)
+        )
+    }
+
     static func colors(for value: Int) -> CharityRipplePalette {
         let value = min(max(value, 0), 100)
         return CharityRipplePalette(
@@ -315,18 +324,15 @@ struct CharityRippleShaderBackground: View {
     let transitionDuration: Float
     let donationValue: Int
     let settings: CharityRippleShaderSettings
-    let baseColor: SIMD3<Float>
-    let glowColor: SIMD3<Float>
-    let edgeColor: SIMD3<Float>
+    let paletteStart: CharityRipplePalette
+    let paletteEnd: CharityRipplePalette
+    let paletteTransitionStartDate: Date?
+    let paletteTransitionDuration: Float
 
     @State private var startDate = Date()
 
     private var shaderOvalColor: SIMD3<Float> {
         colorScheme == .dark ? settings.ovalColor : SIMD3<Float>(0.98, 0.98, 0.99)
-    }
-
-    private var shaderBackgroundColor: SIMD3<Float> {
-        colorScheme == .dark ? settings.backgroundColor : tintedBackground(from: baseColor, saturationMultiplier: 0.2)
     }
 
     private var shaderNoiseStrength: Float {
@@ -362,6 +368,8 @@ struct CharityRippleShaderBackground: View {
                 let time = Float(timeline.date.timeIntervalSince(startDate))
                 let shockElapsed = shockStartDate.map { Float(timeline.date.timeIntervalSince($0)) } ?? -1.0
                 let transitionElapsed = transitionStartDate.map { Float(timeline.date.timeIntervalSince($0)) } ?? -1.0
+                let palette = currentPalette(at: timeline.date)
+                let backgroundColor = shaderBackgroundColor(from: palette.base)
                 let rayIntensity = settings.rayIntensity * rayBoost * highValueGlowScale
 
                 Rectangle()
@@ -377,11 +385,11 @@ struct CharityRippleShaderBackground: View {
                             .float4(settings.blurAmount, settings.coreWidth, settings.coreHeight, settings.coreRoundness),
                             .float4(shaderNoiseStrength, settings.noiseSize, 0.0, 0.0),
                             .float4(rayIntensity, settings.rayCount, settings.raySpeed, settings.raySharpness),
-                            .float3(baseColor.x, baseColor.y, baseColor.z),
-                            .float3(glowColor.x, glowColor.y, glowColor.z),
-                            .float3(edgeColor.x, edgeColor.y, edgeColor.z),
+                            .float3(palette.base.x, palette.base.y, palette.base.z),
+                            .float3(palette.glow.x, palette.glow.y, palette.glow.z),
+                            .float3(palette.edge.x, palette.edge.y, palette.edge.z),
                             .float3(shaderOvalColor.x, shaderOvalColor.y, shaderOvalColor.z),
-                            .float3(shaderBackgroundColor.x, shaderBackgroundColor.y, shaderBackgroundColor.z),
+                            .float3(backgroundColor.x, backgroundColor.y, backgroundColor.z),
                             .float(breatheBoost),
                             .float(colorScheme == .dark ? 0.0 : 1.0),
                             .float(settings.distortion),
@@ -417,6 +425,20 @@ struct CharityRippleShaderBackground: View {
         let x = (percentCenter.x - frame.minX) / max(size.width, 1)
         let y = (percentCenter.y - frame.minY) / max(size.height, 1)
         return CGPoint(x: min(max(x, 0), 1), y: min(max(y, 0), 1))
+    }
+
+    private func currentPalette(at date: Date) -> CharityRipplePalette {
+        guard let startDate = paletteTransitionStartDate else {
+            return paletteEnd
+        }
+
+        let duration = max(paletteTransitionDuration, 0.001)
+        let rawProgress = Float(date.timeIntervalSince(startDate)) / duration
+        return paletteStart.interpolated(to: paletteEnd, progress: smoothstep(rawProgress))
+    }
+
+    private func shaderBackgroundColor(from baseColor: SIMD3<Float>) -> SIMD3<Float> {
+        colorScheme == .dark ? settings.backgroundColor : tintedBackground(from: baseColor, saturationMultiplier: 0.2)
     }
 
     private func tintedBackground(from rgb: SIMD3<Float>, saturationMultiplier: CGFloat) -> SIMD3<Float> {
