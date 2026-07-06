@@ -89,10 +89,8 @@ static float3 desaturateColor(float3 color, float amount) {
     float transitionDuration = max(completionTransition.y, 0.001);
     float transitionIntensity = completionTransition.z;
     float transitionT = transitionElapsed >= 0.0 ? clamp(transitionElapsed / transitionDuration, 0.0, 1.0) : 0.0;
-    float transitionPulseEnvelope = transitionElapsed >= 0.0 ? 1.0 - smoothstep(0.34, 0.64, transitionT) : 0.0;
-    float transitionPulseWave = 0.5 + 0.5 * sin(transitionT * 18.84955592);
-    float transitionPulse = transitionPulseWave * transitionPulseEnvelope * transitionIntensity;
-    float transitionExpand = transitionElapsed >= 0.0 ? smoothstep(0.36, 1.0, transitionT) : 0.0;
+    float transitionPulse = 0.0;
+    float transitionExpand = transitionElapsed >= 0.0 ? smoothstep(0.0, 1.0, transitionT) : 0.0;
     transitionExpand = pow(transitionExpand, 0.72) * transitionIntensity;
     transitionExpand = clamp(transitionExpand, 0.0, 1.0);
     float maxX = max(center.x, 1.0 - center.x);

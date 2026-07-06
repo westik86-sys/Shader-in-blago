@@ -479,9 +479,8 @@ private struct FundContributionView: View {
     private let completionTransitionDuration: TimeInterval = 1.18
     private let completionSuccessRevealDelay: TimeInterval = 1.08
     private let completionFlashFadeDuration: TimeInterval = 0.32
+    private let completionControlsFadeDelay: TimeInterval = 0.35
     private let completionControlsFadeDuration: TimeInterval = 0.26
-    private let completionPulseBoostValue: Float = 0.46
-    private let completionBreatheBoostValue: Float = 0.34
     private let sliderHorizontalInset: CGFloat = 20
 
     var body: some View {
@@ -628,8 +627,8 @@ private struct FundContributionView: View {
                 percentCenter: percentCenter,
                 hasPercentCenter: hasPercentCenter,
                 progress: max(displayProgress, 1.0),
-                pulseBoost: max(pulseBoost, completionPulseBoostValue),
-                breatheBoost: breatheBoost + shockBreatheBoost + completionBreatheBoostValue,
+                pulseBoost: pulseBoost,
+                breatheBoost: breatheBoost + shockBreatheBoost,
                 shockStartDate: shockStartDate,
                 shockDuration: Float(shockDuration),
                 shockWidth: shockWidth,
@@ -707,26 +706,14 @@ private struct FundContributionView: View {
         isCompletionFlashOverlayVisible = false
         completionFlashOverlayOpacity = 0.0
         contributionControlsOpacity = 1.0
+        pulseBoost = 0.0
+        breatheBoost = 0.0
 
         withAnimation(.easeInOut(duration: 0.46)) {
             displayProgress = 1.0
-            pulseBoost = completionPulseBoostValue
-            breatheBoost = completionBreatheBoostValue
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-            guard isCompletionTransitionActive else {
-                return
-            }
-
-            withAnimation(.easeOut(duration: 0.48)) {
-                pulseBoost = completionPulseBoostValue * 0.42
-                breatheBoost = completionBreatheBoostValue * 0.55
-            }
-        }
-
-        let controlsFadeDelay = max(0, completionSuccessRevealDelay - completionControlsFadeDuration - 0.04)
-        DispatchQueue.main.asyncAfter(deadline: .now() + controlsFadeDelay) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + completionControlsFadeDelay) {
             guard isCompletionTransitionActive else {
                 return
             }
