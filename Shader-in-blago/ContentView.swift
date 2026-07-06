@@ -81,6 +81,14 @@ struct ContentView: View {
                         charityShare: $charityShare,
                         blackShare: $blackShare
                     ) {
+                        navigationPath.append(.fundSuccess(fund))
+                    }
+
+                case let .fundSuccess(fund):
+                    FundSuccessView(
+                        fund: fund,
+                        charityShare: charityShare
+                    ) {
                         navigationPath.removeAll()
                     }
                 }
@@ -182,6 +190,7 @@ struct ContentView: View {
 private enum CashbackNavigationRoute: Hashable {
     case fundSelection
     case fundContribution(CharityFund)
+    case fundSuccess(CharityFund)
 }
 
 private enum CashbackRoute: String, Identifiable {
@@ -508,13 +517,7 @@ private struct FundContributionView: View {
                 Spacer(minLength: 132)
 
                 VStack(spacing: 24) {
-                    Text(estimatedMonthlyText)
-                        .font(.system(size: 13, weight: .semibold))
-                        .tracking(-0.08)
-                        .foregroundStyle(TUIColors.primaryText)
-                        .padding(.horizontal, 10)
-                        .frame(height: 28)
-                        .background(TUIColors.neutralFill, in: Capsule())
+                    estimatedMonthlyChip
 
                     TUILabsScaleSelector(
                         value: $charityShare,
@@ -529,7 +532,7 @@ private struct FundContributionView: View {
                 }
                 .padding(.bottom, 36)
             }
-            .padding(.bottom, 104)
+            .padding(.bottom, 24)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             Button {
@@ -578,6 +581,31 @@ private struct FundContributionView: View {
             syncShaderState(for: charityPercent, animated: false, allowsPulse: false)
             lastPulseTick = (charityPercent / 5) * 5
         }
+    }
+
+    @ViewBuilder
+    private var estimatedMonthlyChip: some View {
+        HStack(spacing: 4) {
+            if charityPercent == 0 {
+                Text("Главное — начать")
+                    .font(.system(size: 13, weight: .semibold))
+                    .tracking(-0.08)
+                    .foregroundStyle(TUIColors.primaryText)
+
+                Text("🌟")
+                    .font(.custom("AppleColorEmoji", size: 13))
+                    .accessibilityHidden(true)
+            } else {
+                Text(estimatedMonthlyText)
+                    .font(.system(size: 13, weight: .semibold))
+                    .tracking(-0.08)
+                    .foregroundStyle(TUIColors.primaryText)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 28)
+        .fixedSize(horizontal: true, vertical: false)
+        .background(TUIColors.neutralFill, in: Capsule())
     }
 
     @ViewBuilder
@@ -668,6 +696,91 @@ private struct FundContributionView: View {
         withAnimation(.easeOut(duration: shockDuration)) {
             shockBreatheBoost = 0.0
         }
+    }
+}
+
+private struct FundSuccessView: View {
+    let fund: CharityFund
+    let charityShare: Double
+    let close: () -> Void
+
+    private var charityPercent: Int {
+        min(max(Int(charityShare.rounded()), 0), 100)
+    }
+
+    private var fundDisplayName: String {
+        var title = fund.title
+        for prefix in ["БФ ", "Фонд ", "АНО "] {
+            if title.hasPrefix(prefix) {
+                title.removeFirst(prefix.count)
+            }
+        }
+        return title
+    }
+
+    private var successMessage: String {
+        switch charityPercent {
+        case 100:
+            return "Весь кэшбэк будет переводиться\nв фонд «\(fundDisplayName)»"
+        case 0:
+            return "Кэшбэк пока не будет\nпереводиться в фонд"
+        default:
+            return "\(charityPercent)% кэшбэка будет переводиться\nв фонд «\(fundDisplayName)»"
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            TUIColors.background
+                .ignoresSafeArea()
+
+            GeometryReader { proxy in
+                let imageWidth = min(proxy.size.width, 402)
+                let imageHeight = imageWidth * 424 / 402
+
+                Image("SuccessHearts")
+                    .resizable()
+                    .frame(width: imageWidth, height: imageHeight)
+                    .position(
+                        x: proxy.size.width / 2,
+                        y: max(imageHeight / 2, proxy.size.height / 2 - 80)
+                    )
+
+                Text(successMessage)
+                    .font(.system(size: 17, weight: .semibold))
+                    .tracking(-0.41)
+                    .foregroundStyle(TUIColors.primaryText)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: min(338, max(0, proxy.size.width - 64)))
+                    .position(
+                        x: proxy.size.width / 2,
+                        y: max(proxy.size.height - 202, proxy.size.height * 0.68)
+                    )
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Button(action: close) {
+                Text("Хорошо")
+                    .font(.system(size: 17, weight: .regular))
+                    .tracking(-0.41)
+                    .foregroundStyle(TUIColors.textOnAccent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(TUIColors.accentYellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(ScaleButtonStyle())
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 14)
+            .background(TUIColors.background)
+        }
+        .navigationTitle("")
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .tint(TUIColors.primaryText)
+        .preferredColorScheme(.dark)
     }
 }
 
