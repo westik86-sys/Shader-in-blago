@@ -466,6 +466,7 @@ private struct FundContributionView: View {
     @State private var completionTransitionStartDate: Date?
     @State private var successScreenOpacity = 0.0
     @State private var contributionControlsOpacity = 1.0
+    @State private var percentValueOpacity = 1.0
     @State private var shaderPaletteStart = CharityRipplePalette.colors(for: 0)
     @State private var shaderPaletteEnd = CharityRipplePalette.colors(for: 0)
     @State private var shaderPaletteTransitionStartDate: Date?
@@ -489,6 +490,10 @@ private struct FundContributionView: View {
     private let completionSuccessFadeDuration: TimeInterval = 1.0
     private let completionControlsFadeDelay: TimeInterval = 0.08
     private let completionControlsFadeDuration: TimeInterval = 0.3
+    private let completionPercentFadeDelay: TimeInterval = 0.0
+    private let completionPercentFadeDuration: TimeInterval = 0.18
+    private let completionPercentYOffset: CGFloat = 4
+    private let completionPercentYOffsetDuration: TimeInterval = 0.45
     private let sliderHorizontalInset: CGFloat = 20
 
     var body: some View {
@@ -566,6 +571,12 @@ private struct FundContributionView: View {
                     .onTapGesture {
                         triggerShaderShock()
                     }
+                    .offset(y: isCompletionTransitionActive ? completionPercentYOffset : 0)
+                    .opacity(percentValueOpacity)
+                    .animation(
+                        .timingCurve(0.22, 0.0, 0.18, 1.0, duration: completionPercentYOffsetDuration),
+                        value: isCompletionTransitionActive
+                    )
 
                 Spacer(minLength: 132)
 
@@ -743,11 +754,22 @@ private struct FundContributionView: View {
         isCompletionTransitionActive = true
         successScreenOpacity = 0.0
         contributionControlsOpacity = 1.0
+        percentValueOpacity = 1.0
         pulseBoost = 0.0
         breatheBoost = 0.0
 
         withAnimation(.timingCurve(0.18, 0.86, 0.28, 1.0, duration: 0.64)) {
             displayProgress = 1.0
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + completionPercentFadeDelay) {
+            guard isCompletionTransitionActive else {
+                return
+            }
+
+            withAnimation(.easeOut(duration: completionPercentFadeDuration)) {
+                percentValueOpacity = 0.0
+            }
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + completionControlsFadeDelay) {
@@ -786,6 +808,7 @@ private struct FundContributionView: View {
             pulseBoost = 0.0
             breatheBoost = 0.0
             contributionControlsOpacity = 1.0
+            percentValueOpacity = 1.0
         }
     }
 
