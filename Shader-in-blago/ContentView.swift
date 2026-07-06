@@ -484,7 +484,7 @@ private struct FundContributionView: View {
     private let shockWidth: Float = 0.4025
     private let shockIntensity: Float = 0.48
     private let shockBreatheBoostValue: Float = 0.35
-    private let completionTransitionDuration: TimeInterval = 2.45
+    private let completionTransitionDuration: TimeInterval = 4.45
     private let completionSuccessRevealDelay: TimeInterval = 0.36
     private let completionSuccessFadeDuration: TimeInterval = 1.0
     private let completionControlsFadeDelay: TimeInterval = 0.08
@@ -503,6 +503,7 @@ private struct FundContributionView: View {
                     fund: fund,
                     charityShare: charityShare
                 )
+                .compositingGroup()
                 .opacity(successScreenOpacity)
                 .transition(.opacity)
             }
@@ -937,6 +938,19 @@ private struct FundSuccessView: View {
                 OneShotVideoView(resourceName: "SuccessHearts", fileExtension: "mp4")
                     .frame(width: videoSide, height: videoSide)
                     .clipped()
+                    .mask {
+                        RadialGradient(
+                            stops: [
+                                .init(color: .black, location: 0.0),
+                                .init(color: .black, location: 0.64),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: videoSide * 0.52
+                        )
+                        .frame(width: videoSide, height: videoSide)
+                    }
                     .position(
                         x: proxy.size.width / 2,
                         y: videoCenterY
