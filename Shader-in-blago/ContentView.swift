@@ -484,9 +484,9 @@ private struct FundContributionView: View {
     private let shockWidth: Float = 0.4025
     private let shockIntensity: Float = 0.48
     private let shockBreatheBoostValue: Float = 0.35
-    private let completionTransitionDuration: TimeInterval = 4.45
+    private let completionTransitionDuration: TimeInterval = 2.45
     private let completionSuccessRevealDelay: TimeInterval = 0.36
-    private let completionSuccessFadeDuration: TimeInterval = 2.42
+    private let completionSuccessFadeDuration: TimeInterval = 1.0
     private let completionControlsFadeDelay: TimeInterval = 0.08
     private let completionControlsFadeDuration: TimeInterval = 0.3
     private let sliderHorizontalInset: CGFloat = 20
@@ -651,7 +651,7 @@ private struct FundContributionView: View {
 
     private var completionBottomAction: some View {
         ZStack {
-            TUIColors.screenUnderlay
+            Color.clear
                 .frame(height: 78)
 
             if isShowingSuccess {
@@ -661,7 +661,6 @@ private struct FundContributionView: View {
                 doneButton
             }
         }
-        .background(TUIColors.screenUnderlay)
     }
 
     private var successBottomAction: some View {
@@ -680,7 +679,6 @@ private struct FundContributionView: View {
             .padding(.top, 14)
             .padding(.bottom, 8)
         }
-        .background(TUIColors.screenUnderlay)
     }
 
     @ViewBuilder
