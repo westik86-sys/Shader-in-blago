@@ -486,18 +486,23 @@ private struct FundContributionView: View {
     private let shockWidth: Float = 0.4025
     private let shockIntensity: Float = 0.48
     private let shockBreatheBoostValue: Float = 0.35
-    private let completionTransitionDuration: TimeInterval = 0.95
-    private let completionSuccessRevealDelay: TimeInterval = 0.84
+    private let completionTransitionDuration: TimeInterval = 0.8
+    private let completionSuccessRevealDelay: TimeInterval = 0.64
     private let completionSuccessFadeDuration: TimeInterval = 0.32
-    private let completionDimFadeDuration: TimeInterval = 0.32
+    private let completionDimFadeDuration: TimeInterval = 0.4
     private let completionDimFadeInDelay: TimeInterval = 0.46
     private let completionDimFadeInDuration: TimeInterval = 0.38
-    private let completionControlsFadeDelay: TimeInterval = 0.36
-    private let completionControlsFadeDuration: TimeInterval = 0.28
+    private let completionControlsFadeDelay: TimeInterval = 0.2
+    private let completionControlsFadeDuration: TimeInterval = 0.22
     private let sliderHorizontalInset: CGFloat = 20
 
     var body: some View {
         ZStack {
+            if !isShowingSuccess || isCompletionTransitionActive {
+                contributionSelectionContent
+                    .transition(.opacity)
+            }
+
             if isShowingSuccess {
                 FundSuccessView(
                     fund: fund,
@@ -506,9 +511,6 @@ private struct FundContributionView: View {
                 )
                 .opacity(successScreenOpacity)
                 .transition(.opacity)
-            } else {
-                contributionSelectionContent
-                    .transition(.opacity)
             }
 
             if isCompletionDimOverlayVisible {
@@ -767,9 +769,6 @@ private struct FundContributionView: View {
         }
 
         isCompletionDimOverlayVisible = true
-        if completionDimOverlayOpacity < 1.0 {
-            completionDimOverlayOpacity = 1.0
-        }
         successScreenOpacity = 0.0
         isShowingSuccess = true
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()

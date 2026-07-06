@@ -140,12 +140,11 @@ static float3 desaturateColor(float3 color, float amount) {
         transitionWaveWindow *= transitionIntensity;
 
         float transitionRadial = length(p) / max(maxRadius, 0.001);
-        float transitionWavePhase = transitionRadial * 28.0 - transitionT * 24.0;
+        float transitionWavePhase = transitionRadial * 24.0 - transitionT * 21.0;
         transitionWaveSigned = sin(transitionWavePhase);
-        float transitionWaveSoft = transitionWaveSigned * 0.5 + 0.5;
-        transitionWaveSoft = smoothstep(0.0, 1.0, transitionWaveSoft);
-        transitionWaveBand = mix(0.22, 1.0, transitionWaveSoft) * transitionWaveWindow * 0.62;
-        transitionWaveShape = transitionWaveSigned * transitionWaveWindow * (0.006 + transitionExpand * 0.008);
+        float transitionWaveSoft = 0.5 + transitionWaveSigned * 0.3;
+        transitionWaveBand = transitionWaveSoft * transitionWaveWindow * 0.5;
+        transitionWaveShape = transitionWaveSigned * transitionWaveWindow * (0.0045 + transitionExpand * 0.006);
     }
 
     float distortionFactor = 1.0 + totalDistortion * 0.195;
@@ -192,7 +191,7 @@ static float3 desaturateColor(float3 color, float amount) {
     waveNorm = pow(waveNorm, 1.5);
     float brightness = (brightnessBase * energy) + waveNorm * (waveAmpParam * energy);
     brightness += transitionPulse * 0.28 + transitionExpand * 0.34;
-    brightness += transitionWaveBand * (0.18 + transitionExpand * 0.22);
+    brightness += transitionWaveBand * (0.12 + transitionExpand * 0.16);
 
     float isLightMode = clamp(isLightModeParam, 0.0, 1.0);
     float topZone = 1.0 - smoothstep(0.04, 0.62, uvOriginal.y);
@@ -215,7 +214,7 @@ static float3 desaturateColor(float3 color, float amount) {
     glowIntensityScaled += climax * climaxStrength;
     glowIntensityScaled *= breathe;
     glowIntensityScaled += transitionPulse * 0.22 + transitionExpand * 0.48;
-    glowIntensityScaled += transitionWaveBand * 0.18;
+    glowIntensityScaled += transitionWaveBand * 0.12;
     float glowField = smoothstep(glowSizeScaled, 0.0, max(distToOval, 0.0));
     glowField = pow(glowField, 1.5) * glowIntensityScaled;
 
@@ -236,7 +235,7 @@ static float3 desaturateColor(float3 color, float amount) {
 
     float3 colorWithGlow = rippleColor * breathe + finalGlowColor * glowField + rayColor * rayField;
     float3 transitionWaveColor = mix(glowColor, float3(1.0, 0.84, 0.24), 0.48);
-    colorWithGlow += transitionWaveColor * transitionWaveBand * ovalMask * (0.16 + transitionExpand * 0.22);
+    colorWithGlow += transitionWaveColor * transitionWaveBand * ovalMask * (0.12 + transitionExpand * 0.16);
     float3 expandedCoreColor = mix(ovalColor, colorWithGlow * (1.0 + transitionExpand * 0.18), transitionExpand);
     float3 colorBeforeFade = mix(colorWithGlow, expandedCoreColor, ovalMask);
 
