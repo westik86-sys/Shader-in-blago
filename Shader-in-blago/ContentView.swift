@@ -269,7 +269,7 @@ private struct CashbackCard: View {
             .background(TUIColors.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
-        .buttonStyle(CardPressButtonStyle())
+        .buttonStyle(CardPressButtonStyle(pressedScale: 0.95))
         .padding(.horizontal, 16)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
@@ -283,22 +283,28 @@ private struct CashbackCard: View {
                 Circle()
                     .fill(TUIColors.blue)
 
-                Text("₽")
-                    .font(.system(size: 22, weight: .semibold))
+                Image("TuiCurrencyRub")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
                     .foregroundStyle(.white)
             }
 
         case .charity:
-            CharityIcon()
+            Image("TuiLogoSquareRyadom")
+                .resizable()
+                .scaledToFit()
 
         case .savings:
             ZStack {
                 Circle()
                     .fill(TUIColors.baseAlt)
 
-                Image(systemName: "plus")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(TUIColors.blue)
+                Image("TuiIcMediumPlus")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
             }
         }
     }
@@ -855,10 +861,14 @@ private struct FundSuccessView: View {
     let charityShare: Double
     let close: () -> Void
 
+    @State private var successTextHeight: CGFloat = SuccessTextHeightPreferenceKey.defaultValue
+
     private let buttonHeight: CGFloat = 56
     private let buttonHorizontalPadding: CGFloat = 16
-    private let buttonVerticalPadding: CGFloat = 14
+    private let buttonTopPadding: CGFloat = 14
+    private let buttonBottomPadding: CGFloat = 8
     private let textToButtonSpacing: CGFloat = 64
+    private let navigationBarHeight: CGFloat = 44
 
     private var charityPercent: Int {
         min(max(Int(charityShare.rounded()), 0), 100)
@@ -891,24 +901,22 @@ private struct FundSuccessView: View {
 
             GeometryReader { proxy in
                 let videoSide = min(proxy.size.width, 550)
-                let buttonUnderlayHeight = proxy.safeAreaInsets.bottom + buttonHeight + buttonVerticalPadding * 2
+                let textBottomInset = max(0, textToButtonSpacing - buttonTopPadding)
+                let textTopY = proxy.size.height - textBottomInset - successTextHeight
+                let navigationBarBottomY = proxy.safeAreaInsets.top + navigationBarHeight
+                let videoCenterY = max(videoSide / 2, (navigationBarBottomY + textTopY) / 2)
 
                 OneShotVideoView(resourceName: "SuccessHearts", fileExtension: "mp4")
                     .frame(width: videoSide, height: videoSide)
                     .clipped()
                     .position(
                         x: proxy.size.width / 2,
-                        y: max(videoSide / 2, proxy.size.height / 2 - 80)
+                        y: videoCenterY
                     )
 
-                TUIColors.screenUnderlay
-                    .frame(width: proxy.size.width, height: buttonUnderlayHeight)
-                    .position(
-                        x: proxy.size.width / 2,
-                        y: proxy.size.height - buttonUnderlayHeight / 2
-                    )
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
 
-                VStack(spacing: textToButtonSpacing) {
                     Text(successMessage)
                         .font(.system(size: 17, weight: .semibold))
                         .tracking(-0.41)
@@ -917,28 +925,61 @@ private struct FundSuccessView: View {
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(width: min(338, max(0, proxy.size.width - 64)))
-
-                    Button(action: close) {
-                        Text("Хорошо")
-                            .font(.system(size: 17, weight: .regular))
-                            .tracking(-0.41)
-                            .foregroundStyle(TUIColors.textOnAccent)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: buttonHeight)
-                            .background(TUIColors.accentYellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    }
-                    .buttonStyle(ScaleButtonStyle())
-                    .padding(.horizontal, buttonHorizontalPadding)
+                        .background {
+                            GeometryReader { textProxy in
+                                Color.clear.preference(
+                                    key: SuccessTextHeightPreferenceKey.self,
+                                    value: textProxy.size.height
+                                )
+                            }
+                        }
                 }
-                .padding(.bottom, proxy.safeAreaInsets.bottom + buttonVerticalPadding)
+                .padding(.bottom, textBottomInset)
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            successBottomAction
         }
         .navigationTitle("")
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .tint(TUIColors.primaryText)
         .preferredColorScheme(.dark)
+        .onPreferenceChange(SuccessTextHeightPreferenceKey.self) { height in
+            guard height > 0, abs(successTextHeight - height) > 0.5 else {
+                return
+            }
+
+            successTextHeight = height
+        }
+    }
+
+    private var successBottomAction: some View {
+        VStack(spacing: 0) {
+            Button(action: close) {
+                Text("Хорошо")
+                    .font(.system(size: 17, weight: .regular))
+                    .tracking(-0.41)
+                    .foregroundStyle(TUIColors.textOnAccent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: buttonHeight)
+                    .background(TUIColors.accentYellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(ScaleButtonStyle())
+            .padding(.horizontal, buttonHorizontalPadding)
+            .padding(.top, buttonTopPadding)
+            .padding(.bottom, buttonBottomPadding)
+        }
+        .background(TUIColors.screenUnderlay)
+    }
+}
+
+private struct SuccessTextHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 44
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
@@ -1515,28 +1556,16 @@ private struct PrototypeChoiceRow: View {
     }
 }
 
-private struct CharityIcon: View {
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(TUIColors.accentYellow)
-                .frame(width: 24, height: 31)
-                .rotationEffect(.degrees(-35))
-                .offset(x: -5, y: -3)
-
-            Circle()
-                .fill(TUIColors.magenta)
-                .frame(width: 23, height: 23)
-                .offset(x: 6, y: 8)
-        }
-        .frame(width: 40, height: 40)
-    }
-}
-
 private struct CardPressButtonStyle: ButtonStyle {
+    let pressedScale: CGFloat
+
+    init(pressedScale: CGFloat = 0.985) {
+        self.pressedScale = pressedScale
+    }
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .scaleEffect(configuration.isPressed ? pressedScale : 1)
             .opacity(configuration.isPressed ? 0.82 : 1)
             .animation(.snappy(duration: 0.14), value: configuration.isPressed)
     }
