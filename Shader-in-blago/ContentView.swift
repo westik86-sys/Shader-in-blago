@@ -479,8 +479,8 @@ private struct FundContributionView: View {
     private let shockWidth: Float = 0.4025
     private let shockIntensity: Float = 0.48
     private let shockBreatheBoostValue: Float = 0.35
-    private let completionTransitionDuration: TimeInterval = 1.18
-    private let completionSuccessRevealDelay: TimeInterval = 1.08
+    private let completionTransitionDuration: TimeInterval = 0.85
+    private let completionSuccessRevealDelay: TimeInterval = 0.78
     private let completionFlashFadeDuration: TimeInterval = 0.32
     private let completionControlsFadeDelay: TimeInterval = 0.35
     private let completionControlsFadeDuration: TimeInterval = 0.26
