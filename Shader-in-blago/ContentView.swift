@@ -463,9 +463,7 @@ private struct FundContributionView: View {
     @State private var shockBreatheBoost: Float = 0.0
     @State private var isShowingSuccess = false
     @State private var isCompletionTransitionActive = false
-    @State private var isCompletionDimOverlayVisible = false
     @State private var completionTransitionStartDate: Date?
-    @State private var completionDimOverlayOpacity = 0.0
     @State private var successScreenOpacity = 0.0
     @State private var contributionControlsOpacity = 1.0
     @State private var shaderPaletteStart = CharityRipplePalette.colors(for: 0)
@@ -486,14 +484,11 @@ private struct FundContributionView: View {
     private let shockWidth: Float = 0.4025
     private let shockIntensity: Float = 0.48
     private let shockBreatheBoostValue: Float = 0.35
-    private let completionTransitionDuration: TimeInterval = 0.8
-    private let completionSuccessRevealDelay: TimeInterval = 0.64
-    private let completionSuccessFadeDuration: TimeInterval = 0.32
-    private let completionDimFadeDuration: TimeInterval = 0.4
-    private let completionDimFadeInDelay: TimeInterval = 0.46
-    private let completionDimFadeInDuration: TimeInterval = 0.38
-    private let completionControlsFadeDelay: TimeInterval = 0.2
-    private let completionControlsFadeDuration: TimeInterval = 0.22
+    private let completionTransitionDuration: TimeInterval = 4.45
+    private let completionSuccessRevealDelay: TimeInterval = 0.36
+    private let completionSuccessFadeDuration: TimeInterval = 2.42
+    private let completionControlsFadeDelay: TimeInterval = 0.08
+    private let completionControlsFadeDuration: TimeInterval = 0.3
     private let sliderHorizontalInset: CGFloat = 20
 
     var body: some View {
@@ -511,12 +506,6 @@ private struct FundContributionView: View {
                 )
                 .opacity(successScreenOpacity)
                 .transition(.opacity)
-            }
-
-            if isCompletionDimOverlayVisible {
-                completionTransitionDimOverlay
-                    .opacity(completionDimOverlayOpacity)
-                    .allowsHitTesting(false)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -664,12 +653,6 @@ private struct FundContributionView: View {
     }
 
     @ViewBuilder
-    private var completionTransitionDimOverlay: some View {
-        TUIColors.screenUnderlay
-            .ignoresSafeArea()
-    }
-
-    @ViewBuilder
     private var estimatedMonthlyChip: some View {
         HStack(spacing: 4) {
             if charityPercent == 0 {
@@ -728,25 +711,13 @@ private struct FundContributionView: View {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         completionTransitionStartDate = Date()
         isCompletionTransitionActive = true
-        isCompletionDimOverlayVisible = true
-        completionDimOverlayOpacity = 0.0
         successScreenOpacity = 0.0
         contributionControlsOpacity = 1.0
         pulseBoost = 0.0
         breatheBoost = 0.0
 
-        withAnimation(.easeInOut(duration: 0.46)) {
+        withAnimation(.timingCurve(0.18, 0.86, 0.28, 1.0, duration: 0.64)) {
             displayProgress = 1.0
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + completionDimFadeInDelay) {
-            guard isCompletionTransitionActive, !isShowingSuccess else {
-                return
-            }
-
-            withAnimation(.easeInOut(duration: completionDimFadeInDuration)) {
-                completionDimOverlayOpacity = 1.0
-            }
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + completionControlsFadeDelay) {
@@ -769,21 +740,16 @@ private struct FundContributionView: View {
             return
         }
 
-        isCompletionDimOverlayVisible = true
         successScreenOpacity = 0.0
         isShowingSuccess = true
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
 
-        withAnimation(.easeInOut(duration: completionSuccessFadeDuration)) {
+        withAnimation(.timingCurve(0.16, 0.0, 0.18, 1.0, duration: completionSuccessFadeDuration)) {
             successScreenOpacity = 1.0
         }
 
-        withAnimation(.easeOut(duration: completionDimFadeDuration).delay(0.02)) {
-            completionDimOverlayOpacity = 0.0
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + max(completionSuccessFadeDuration, completionDimFadeDuration) + 0.1) {
-            isCompletionDimOverlayVisible = false
+        let remainingTransitionDuration = max(0, completionTransitionDuration - completionSuccessRevealDelay)
+        DispatchQueue.main.asyncAfter(deadline: .now() + remainingTransitionDuration) {
             isCompletionTransitionActive = false
             completionTransitionStartDate = nil
             pulseBoost = 0.0

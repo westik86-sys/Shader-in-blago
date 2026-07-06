@@ -26,6 +26,23 @@ static float3 desaturateColor(float3 color, float amount) {
     return mix(color, float3(luma), clamp(amount, 0.0, 1.0));
 }
 
+static float easeOutCubic(float x) {
+    float t = clamp(x, 0.0, 1.0);
+    float inverse = 1.0 - t;
+    return 1.0 - inverse * inverse * inverse;
+}
+
+static float easeOutBack(float x) {
+    float t = clamp(x, 0.0, 1.0) - 1.0;
+    return 1.0 + 2.05 * t * t * t + 1.05 * t * t;
+}
+
+static float radialPulse(float radial, float travel, float width) {
+    float distance = abs(radial - travel) / max(width, 0.001);
+    float pulse = 1.0 - smoothstep(0.0, 1.0, distance);
+    return pulse * pulse;
+}
+
 [[ stitchable ]] half4 charityRipple(
     float2 position,
     half4 color,
@@ -90,10 +107,15 @@ static float3 desaturateColor(float3 color, float amount) {
     float transitionIntensity = completionTransition.z;
     float transitionT = transitionElapsed >= 0.0 ? clamp(transitionElapsed / transitionDuration, 0.0, 1.0) : 0.0;
     float transitionPulse = 0.0;
-    float transitionExpand = transitionElapsed >= 0.0 ? smoothstep(0.0, 1.0, transitionT) : 0.0;
-    transitionExpand = pow(transitionExpand, 0.72) * transitionIntensity;
-    transitionExpand = clamp(transitionExpand, 0.0, 1.0);
-    float transitionDarken = transitionElapsed >= 0.0 ? smoothstep(0.48, 0.88, transitionT) : 0.0;
+    float transitionTravel = easeOutCubic(transitionT);
+    float transitionEcho = sin((transitionT - 0.1) * 18.5) * exp(-transitionT * 3.0);
+    transitionEcho *= smoothstep(0.1, 0.64, transitionT);
+    float transitionExpand = transitionElapsed >= 0.0 ? easeOutBack(transitionT) + transitionEcho * 0.035 : 0.0;
+    transitionExpand = clamp(transitionExpand * transitionIntensity, 0.0, 1.06);
+    float transitionCover = clamp(transitionExpand, 0.0, 1.0);
+    float transitionDarken = transitionElapsed >= 0.0
+        ? smoothstep(0.16, 0.36, transitionT) * (1.0 - smoothstep(0.74, 1.0, transitionT)) * 0.82
+        : 0.0;
     float maxX = max(center.x, 1.0 - center.x);
     float maxY = max(center.y, 1.0 - center.y) * invAr;
     float maxRadius = length(float2(maxX, maxY));
@@ -136,15 +158,25 @@ static float3 desaturateColor(float3 color, float amount) {
     float transitionWaveBand = 0.0;
     float transitionWaveShape = 0.0;
     if (transitionElapsed >= 0.0) {
-        transitionWaveWindow = smoothstep(0.32, 0.62, transitionT) * (1.0 - smoothstep(0.96, 1.0, transitionT));
+        transitionWaveWindow = 1.0 - smoothstep(0.92, 1.0, transitionT);
         transitionWaveWindow *= transitionIntensity;
 
         float transitionRadial = length(p) / max(maxRadius, 0.001);
-        float transitionWavePhase = transitionRadial * 24.0 - transitionT * 21.0;
-        transitionWaveSigned = sin(transitionWavePhase);
-        float transitionWaveSoft = 0.5 + transitionWaveSigned * 0.3;
-        transitionWaveBand = transitionWaveSoft * transitionWaveWindow * 0.5;
-        transitionWaveShape = transitionWaveSigned * transitionWaveWindow * (0.0045 + transitionExpand * 0.006);
+        float firstWave = radialPulse(transitionRadial, transitionTravel * 1.08 - 0.03, 0.085);
+        firstWave *= 1.0 - smoothstep(0.48, 0.68, transitionT);
+
+        float secondWaveT = clamp((transitionT - 0.2) / 0.68, 0.0, 1.0);
+        float secondWave = radialPulse(transitionRadial, easeOutCubic(secondWaveT) * 1.08 - 0.02, 0.105);
+        secondWave *= smoothstep(0.0, 0.16, secondWaveT) * (1.0 - smoothstep(0.82, 1.0, secondWaveT));
+
+        float thirdWaveT = clamp((transitionT - 0.42) / 0.5, 0.0, 1.0);
+        float thirdWave = radialPulse(transitionRadial, easeOutCubic(thirdWaveT) * 1.04, 0.125);
+        thirdWave *= smoothstep(0.0, 0.2, thirdWaveT) * (1.0 - smoothstep(0.78, 1.0, thirdWaveT));
+
+        transitionWaveSigned = firstWave - secondWave * 0.65 + thirdWave * 0.4;
+        transitionWaveBand = (firstWave * 0.78 + secondWave * 0.58 + thirdWave * 0.36) * transitionWaveWindow;
+        transitionWaveShape = transitionWaveSigned * transitionWaveWindow * (0.007 + transitionCover * 0.007);
+        transitionPulse = transitionWaveBand * 0.55;
     }
 
     float distortionFactor = 1.0 + totalDistortion * 0.195;
@@ -190,8 +222,8 @@ static float3 desaturateColor(float3 color, float amount) {
     waveNorm = smoothstep(0.0, 1.0, waveNorm);
     waveNorm = pow(waveNorm, 1.5);
     float brightness = (brightnessBase * energy) + waveNorm * (waveAmpParam * energy);
-    brightness += transitionPulse * 0.28 + transitionExpand * 0.34;
-    brightness += transitionWaveBand * (0.12 + transitionExpand * 0.16);
+    brightness += transitionPulse * 0.28 + transitionCover * 0.34;
+    brightness += transitionWaveBand * (0.12 + transitionCover * 0.16);
 
     float isLightMode = clamp(isLightModeParam, 0.0, 1.0);
     float topZone = 1.0 - smoothstep(0.04, 0.62, uvOriginal.y);
@@ -200,7 +232,7 @@ static float3 desaturateColor(float3 color, float amount) {
     float baseTopMix = darkBaseMix * (1.0 - isLightMode);
     baseTopMix = clamp(baseTopMix, 0.0, 1.0);
     float3 lightModeTopColor = desaturateColor(baseColor, 0.1);
-    float3 darkModeTopColor = mix(float3(1.0), mix(baseColor, glowColor, 0.24), transitionExpand);
+    float3 darkModeTopColor = mix(float3(1.0), mix(baseColor, glowColor, 0.24), transitionCover);
     float3 baseTopColor = mix(darkModeTopColor, lightModeTopColor, isLightMode);
     float3 verticalBaseColor = mix(baseColor, baseTopColor, baseTopMix);
     float3 rippleColor = verticalBaseColor * brightness;
@@ -213,7 +245,7 @@ static float3 desaturateColor(float3 color, float amount) {
     glowIntensityScaled += pulse * pulseStrength;
     glowIntensityScaled += climax * climaxStrength;
     glowIntensityScaled *= breathe;
-    glowIntensityScaled += transitionPulse * 0.22 + transitionExpand * 0.48;
+    glowIntensityScaled += transitionPulse * 0.22 + transitionCover * 0.48;
     glowIntensityScaled += transitionWaveBand * 0.12;
     float glowField = smoothstep(glowSizeScaled, 0.0, max(distToOval, 0.0));
     glowField = pow(glowField, 1.5) * glowIntensityScaled;
@@ -235,12 +267,12 @@ static float3 desaturateColor(float3 color, float amount) {
 
     float3 colorWithGlow = rippleColor * breathe + finalGlowColor * glowField + rayColor * rayField;
     float3 transitionWaveColor = mix(glowColor, float3(1.0, 0.84, 0.24), 0.48);
-    colorWithGlow += transitionWaveColor * transitionWaveBand * ovalMask * (0.12 + transitionExpand * 0.16);
-    float3 expandedCoreColor = mix(ovalColor, colorWithGlow * (1.0 + transitionExpand * 0.18), transitionExpand);
+    colorWithGlow += transitionWaveColor * transitionWaveBand * ovalMask * (0.12 + transitionCover * 0.16);
+    float3 expandedCoreColor = mix(ovalColor, colorWithGlow * (1.0 + transitionCover * 0.18), transitionCover);
     float3 colorBeforeFade = mix(colorWithGlow, expandedCoreColor, ovalMask);
 
-    float fadeInner = mix(0.35, maxRadius * 0.68, transitionExpand);
-    float fadeOuter = mix(0.7, maxRadius * 1.2, transitionExpand);
+    float fadeInner = mix(0.35, maxRadius * 0.68, transitionCover);
+    float fadeOuter = mix(0.7, maxRadius * 1.2, transitionCover);
     float fadeToBackground = smoothstep(fadeInner, fadeOuter, dist);
     float3 darkTopBackground = float3(28.0 / 255.0, 28.0 / 255.0, 30.0 / 255.0);
     float3 darkModeBackground = darkTopBackground;
