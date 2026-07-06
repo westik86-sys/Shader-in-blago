@@ -240,7 +240,8 @@ static float radialPulse(float radial, float travel, float width) {
     float blurScaled = mix(blurAmount * 1.15, blurAmount * 0.85, tension);
     float ovalMask = smoothstep(blurScaled, -blurScaled, distToOval);
 
-    float glowSizeScaled = mix(glowSizeParam * 1.2, glowSizeParam * 0.9, tension);
+    float finalRimWidthMultiplier = mix(1.0, 5.0, transitionCover);
+    float glowSizeScaled = mix(glowSizeParam * 1.2, glowSizeParam * 0.9, tension) * finalRimWidthMultiplier;
     float glowIntensityScaled = glowIntensityParam * energy;
     glowIntensityScaled += pulse * pulseStrength;
     glowIntensityScaled += climax * climaxStrength;
