@@ -311,6 +311,8 @@ struct CharityRippleShaderBackground: View {
     let shockDuration: Float
     let shockWidth: Float
     let shockIntensity: Float
+    let transitionStartDate: Date?
+    let transitionDuration: Float
     let donationValue: Int
     let settings: CharityRippleShaderSettings
     let baseColor: SIMD3<Float>
@@ -359,6 +361,7 @@ struct CharityRippleShaderBackground: View {
                 let center = shaderCenter(in: frame, size: size)
                 let time = Float(timeline.date.timeIntervalSince(startDate))
                 let shockElapsed = shockStartDate.map { Float(timeline.date.timeIntervalSince($0)) } ?? -1.0
+                let transitionElapsed = transitionStartDate.map { Float(timeline.date.timeIntervalSince($0)) } ?? -1.0
                 let rayIntensity = settings.rayIntensity * rayBoost * highValueGlowScale
 
                 Rectangle()
@@ -383,7 +386,8 @@ struct CharityRippleShaderBackground: View {
                             .float(colorScheme == .dark ? 0.0 : 1.0),
                             .float(settings.distortion),
                             .float(settings.distortionAnimation),
-                            .float4(shockElapsed, shockDuration, shockWidth, shockIntensity)
+                            .float4(shockElapsed, shockDuration, shockWidth, shockIntensity),
+                            .float4(transitionElapsed, transitionDuration, 1.0, 0.0)
                         )
                     )
                     .opacity(Double(intensityScale))

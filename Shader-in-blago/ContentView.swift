@@ -81,14 +81,6 @@ struct ContentView: View {
                         charityShare: $charityShare,
                         blackShare: $blackShare
                     ) {
-                        navigationPath.append(.fundSuccess(fund))
-                    }
-
-                case let .fundSuccess(fund):
-                    FundSuccessView(
-                        fund: fund,
-                        charityShare: charityShare
-                    ) {
                         navigationPath.removeAll()
                     }
                 }
@@ -190,7 +182,6 @@ struct ContentView: View {
 private enum CashbackNavigationRoute: Hashable {
     case fundSelection
     case fundContribution(CharityFund)
-    case fundSuccess(CharityFund)
 }
 
 private enum CashbackRoute: String, Identifiable {
@@ -461,6 +452,12 @@ private struct FundContributionView: View {
     @State private var breatheBoost: Float = 0.0
     @State private var shockStartDate: Date?
     @State private var shockBreatheBoost: Float = 0.0
+    @State private var isShowingSuccess = false
+    @State private var isCompletionTransitionActive = false
+    @State private var isCompletionFlashOverlayVisible = false
+    @State private var completionTransitionStartDate: Date?
+    @State private var completionFlashOverlayOpacity = 0.0
+    @State private var contributionControlsOpacity = 1.0
 
     private var estimatedMonthlyText: String {
         "Примерно \(Int(charityShare * 3)) ₽ в месяц"
@@ -479,9 +476,73 @@ private struct FundContributionView: View {
     private let shockWidth: Float = 0.4025
     private let shockIntensity: Float = 0.48
     private let shockBreatheBoostValue: Float = 0.35
+    private let completionTransitionDuration: TimeInterval = 1.18
+    private let completionSuccessRevealDelay: TimeInterval = 1.08
+    private let completionFlashFadeDuration: TimeInterval = 0.32
+    private let completionPulseBoostValue: Float = 0.46
+    private let completionBreatheBoostValue: Float = 0.34
     private let sliderHorizontalInset: CGFloat = 20
 
     var body: some View {
+        ZStack {
+            if isShowingSuccess {
+                FundSuccessView(
+                    fund: fund,
+                    charityShare: charityShare,
+                    close: finishFlow
+                )
+                .transition(.opacity)
+            } else {
+                contributionSelectionContent
+                    .transition(.opacity)
+            }
+
+            if isCompletionFlashOverlayVisible {
+                completionTransitionOverlay
+                    .opacity(completionFlashOverlayOpacity)
+                    .allowsHitTesting(false)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !isShowingSuccess {
+                doneButton
+            }
+        }
+        .navigationTitle(isShowingSuccess || isCompletionTransitionActive ? "" : fund.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(isShowingSuccess || isCompletionTransitionActive)
+        .toolbar {
+            if !isShowingSuccess && !isCompletionTransitionActive {
+                ToolbarItem(placement: .topBarTrailing) {
+                    FundFavoriteButton(
+                        imageName: fund.imageName,
+                        fundTitle: fund.title,
+                        isFavorite: isFavorite
+                    ) {
+                        isFavorite.toggle()
+                    }
+                }
+            }
+        }
+        .toolbar(isShowingSuccess || isCompletionTransitionActive ? .hidden : .visible, for: .navigationBar)
+        .tint(TUIColors.primaryText)
+        .preferredColorScheme(.dark)
+        .onPreferenceChange(RippleCenterPreferenceKey.self) { point in
+            if let point {
+                percentCenter = point
+                hasPercentCenter = true
+            }
+        }
+        .onChange(of: charityShare) { _, newValue in
+            syncShaderState(for: Int(newValue.rounded()), animated: true, allowsPulse: true)
+        }
+        .onAppear {
+            syncShaderState(for: charityPercent, animated: false, allowsPulse: false)
+            lastPulseTick = (charityPercent / 5) * 5
+        }
+    }
+
+    private var contributionSelectionContent: some View {
         ZStack {
             TUIScreenBackground()
 
@@ -533,53 +594,54 @@ private struct FundContributionView: View {
                 .padding(.bottom, 36)
             }
             .padding(.bottom, 24)
+            .opacity(contributionControlsOpacity)
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Button {
-                selectedFund = fund.title
-                blackShare = max(0, 100 - charityShare)
-                finishFlow()
-            } label: {
-                Text("Готово")
-                    .font(.system(size: 17, weight: .regular))
-                    .tracking(-0.41)
-                    .foregroundStyle(TUIColors.primaryText)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(TUIColors.neutralFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(ScaleButtonStyle())
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 8)
+    }
+
+    private var doneButton: some View {
+        Button {
+            selectedFund = fund.title
+            blackShare = max(0, 100 - charityShare)
+            startCompletionTransition()
+        } label: {
+            Text("Готово")
+                .font(.system(size: 17, weight: .regular))
+                .tracking(-0.41)
+                .foregroundStyle(TUIColors.primaryText)
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(TUIColors.neutralFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
-        .navigationTitle(fund.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                FundFavoriteButton(
-                    imageName: fund.imageName,
-                    fundTitle: fund.title,
-                    isFavorite: isFavorite
-                ) {
-                    isFavorite.toggle()
-                }
-            }
-        }
-        .tint(TUIColors.primaryText)
-        .preferredColorScheme(.dark)
-        .onPreferenceChange(RippleCenterPreferenceKey.self) { point in
-            if let point {
-                percentCenter = point
-                hasPercentCenter = true
-            }
-        }
-        .onChange(of: charityShare) { _, newValue in
-            syncShaderState(for: Int(newValue.rounded()), animated: true, allowsPulse: true)
-        }
-        .onAppear {
-            syncShaderState(for: charityPercent, animated: false, allowsPulse: false)
-            lastPulseTick = (charityPercent / 5) * 5
+        .buttonStyle(ScaleButtonStyle())
+        .disabled(isCompletionTransitionActive)
+        .opacity(contributionControlsOpacity)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private var completionTransitionOverlay: some View {
+        if #available(iOS 17.0, *) {
+            CharityRippleShaderBackground(
+                percentCenter: percentCenter,
+                hasPercentCenter: hasPercentCenter,
+                progress: max(displayProgress, 1.0),
+                pulseBoost: max(pulseBoost, completionPulseBoostValue),
+                breatheBoost: breatheBoost + shockBreatheBoost + completionBreatheBoostValue,
+                shockStartDate: shockStartDate,
+                shockDuration: Float(shockDuration),
+                shockWidth: shockWidth,
+                shockIntensity: shockIntensity,
+                transitionStartDate: completionTransitionStartDate,
+                transitionDuration: Float(completionTransitionDuration),
+                donationValue: 100,
+                settings: shaderSettings,
+                baseColor: palette.base,
+                glowColor: palette.glow,
+                edgeColor: palette.edge
+            )
+            .ignoresSafeArea()
         }
     }
 
@@ -621,6 +683,8 @@ private struct FundContributionView: View {
                 shockDuration: Float(shockDuration),
                 shockWidth: shockWidth,
                 shockIntensity: shockIntensity,
+                transitionStartDate: completionTransitionStartDate,
+                transitionDuration: Float(completionTransitionDuration),
                 donationValue: charityPercent,
                 settings: shaderSettings,
                 baseColor: palette.base,
@@ -628,6 +692,67 @@ private struct FundContributionView: View {
                 edgeColor: palette.edge
             )
             .ignoresSafeArea()
+        }
+    }
+
+    private func startCompletionTransition() {
+        guard !isCompletionTransitionActive, !isShowingSuccess else {
+            return
+        }
+
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        completionTransitionStartDate = Date()
+        isCompletionTransitionActive = true
+        isCompletionFlashOverlayVisible = false
+        completionFlashOverlayOpacity = 0.0
+
+        withAnimation(.easeOut(duration: 0.18)) {
+            contributionControlsOpacity = 0.0
+        }
+
+        withAnimation(.easeInOut(duration: 0.46)) {
+            displayProgress = 1.0
+            pulseBoost = completionPulseBoostValue
+            breatheBoost = completionBreatheBoostValue
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            guard isCompletionTransitionActive else {
+                return
+            }
+
+            withAnimation(.easeOut(duration: 0.48)) {
+                pulseBoost = completionPulseBoostValue * 0.42
+                breatheBoost = completionBreatheBoostValue * 0.55
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + completionSuccessRevealDelay) {
+            revealSuccessAfterCompletionTransition()
+        }
+    }
+
+    private func revealSuccessAfterCompletionTransition() {
+        guard isCompletionTransitionActive else {
+            return
+        }
+
+        isCompletionFlashOverlayVisible = true
+        completionFlashOverlayOpacity = 1.0
+        isShowingSuccess = true
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+
+        withAnimation(.easeOut(duration: completionFlashFadeDuration).delay(0.04)) {
+            completionFlashOverlayOpacity = 0.0
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + completionFlashFadeDuration + 0.12) {
+            isCompletionFlashOverlayVisible = false
+            isCompletionTransitionActive = false
+            completionTransitionStartDate = nil
+            pulseBoost = 0.0
+            breatheBoost = 0.0
+            contributionControlsOpacity = 1.0
         }
     }
 

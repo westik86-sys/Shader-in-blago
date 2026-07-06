@@ -47,7 +47,8 @@ static float3 desaturateColor(float3 color, float amount) {
     float isLightModeParam,
     float distortion,
     float distortionAnimation,
-    float4 shock
+    float4 shock,
+    float4 completionTransition
 ) {
     if (color.a <= 0.0h) {
         return color;
@@ -84,6 +85,20 @@ static float3 desaturateColor(float3 color, float amount) {
     float2 uvOriginal = uv;
     float invAr = size.y / size.x;
 
+    float transitionElapsed = completionTransition.x;
+    float transitionDuration = max(completionTransition.y, 0.001);
+    float transitionIntensity = completionTransition.z;
+    float transitionT = transitionElapsed >= 0.0 ? clamp(transitionElapsed / transitionDuration, 0.0, 1.0) : 0.0;
+    float transitionPulseEnvelope = transitionElapsed >= 0.0 ? 1.0 - smoothstep(0.34, 0.64, transitionT) : 0.0;
+    float transitionPulseWave = 0.5 + 0.5 * sin(transitionT * 18.84955592);
+    float transitionPulse = transitionPulseWave * transitionPulseEnvelope * transitionIntensity;
+    float transitionExpand = transitionElapsed >= 0.0 ? smoothstep(0.36, 1.0, transitionT) : 0.0;
+    transitionExpand = pow(transitionExpand, 0.72) * transitionIntensity;
+    transitionExpand = clamp(transitionExpand, 0.0, 1.0);
+    float maxX = max(center.x, 1.0 - center.x);
+    float maxY = max(center.y, 1.0 - center.y) * invAr;
+    float maxRadius = length(float2(maxX, maxY));
+
     float progressClamped = clamp(progress, 0.0, 1.0);
     float energy = smoothstep(0.0, 1.0, progressClamped);
     energy = pow(energy, max(0.01, energyCurve));
@@ -118,7 +133,37 @@ static float3 desaturateColor(float3 color, float amount) {
     angle = atan2(p.y, p.x);
 
     float distortionFactor = 1.0 + totalDistortion * 0.195;
-    float2 superellipseSize = float2(coreWidth, coreHeight) * breathe * distortionFactor;
+    float2 baseSuperellipseSize = float2(coreWidth, coreHeight) * breathe * distortionFactor;
+    float2 safeBaseSuperellipseSize = max(baseSuperellipseSize, float2(0.001));
+    float superellipsePower = max(coreRoundness, 0.001);
+    float left = center.x;
+    float right = 1.0 - center.x;
+    float top = center.y * invAr;
+    float bottom = (1.0 - center.y) * invAr;
+    float cornerScaleTL = pow(
+        pow(left / safeBaseSuperellipseSize.x, superellipsePower) +
+        pow(top / safeBaseSuperellipseSize.y, superellipsePower),
+        1.0 / superellipsePower
+    );
+    float cornerScaleTR = pow(
+        pow(right / safeBaseSuperellipseSize.x, superellipsePower) +
+        pow(top / safeBaseSuperellipseSize.y, superellipsePower),
+        1.0 / superellipsePower
+    );
+    float cornerScaleBL = pow(
+        pow(left / safeBaseSuperellipseSize.x, superellipsePower) +
+        pow(bottom / safeBaseSuperellipseSize.y, superellipsePower),
+        1.0 / superellipsePower
+    );
+    float cornerScaleBR = pow(
+        pow(right / safeBaseSuperellipseSize.x, superellipsePower) +
+        pow(bottom / safeBaseSuperellipseSize.y, superellipsePower),
+        1.0 / superellipsePower
+    );
+    float coverScale = max(max(cornerScaleTL, cornerScaleTR), max(cornerScaleBL, cornerScaleBR)) * 1.12;
+    float2 expandedSuperellipseSize = baseSuperellipseSize * coverScale;
+    float2 superellipseSize = mix(baseSuperellipseSize, expandedSuperellipseSize, transitionExpand);
+    superellipseSize *= 1.0 + transitionPulse * 0.08;
 
     float distToOval = sdSuperellipse(p, superellipseSize, coreRoundness);
     float dist = length(p);
@@ -130,6 +175,7 @@ static float3 desaturateColor(float3 color, float amount) {
     waveNorm = smoothstep(0.0, 1.0, waveNorm);
     waveNorm = pow(waveNorm, 1.5);
     float brightness = (brightnessBase * energy) + waveNorm * (waveAmpParam * energy);
+    brightness += transitionPulse * 0.28 + transitionExpand * 0.34;
 
     float isLightMode = clamp(isLightModeParam, 0.0, 1.0);
     float topZone = 1.0 - smoothstep(0.04, 0.62, uvOriginal.y);
@@ -150,6 +196,7 @@ static float3 desaturateColor(float3 color, float amount) {
     glowIntensityScaled += pulse * pulseStrength;
     glowIntensityScaled += climax * climaxStrength;
     glowIntensityScaled *= breathe;
+    glowIntensityScaled += transitionPulse * 0.22 + transitionExpand * 0.48;
     float glowField = smoothstep(glowSizeScaled, 0.0, max(distToOval, 0.0));
     glowField = pow(glowField, 1.5) * glowIntensityScaled;
 
@@ -169,9 +216,12 @@ static float3 desaturateColor(float3 color, float amount) {
     float3 rayColor = mix(glowColor, edgeColor, 0.6);
 
     float3 colorWithGlow = rippleColor * breathe + finalGlowColor * glowField + rayColor * rayField;
-    float3 colorBeforeFade = mix(colorWithGlow, ovalColor, ovalMask);
+    float3 expandedCoreColor = mix(ovalColor, colorWithGlow * (1.0 + transitionExpand * 0.18), transitionExpand);
+    float3 colorBeforeFade = mix(colorWithGlow, expandedCoreColor, ovalMask);
 
-    float fadeToBackground = smoothstep(0.35, 0.7, dist);
+    float fadeInner = mix(0.35, maxRadius * 0.68, transitionExpand);
+    float fadeOuter = mix(0.7, maxRadius * 1.2, transitionExpand);
+    float fadeToBackground = smoothstep(fadeInner, fadeOuter, dist);
     float3 darkTopBackground = float3(28.0 / 255.0, 28.0 / 255.0, 30.0 / 255.0);
     float3 darkModeBackground = darkTopBackground;
     float3 lightModeBackground = backgroundColor;
@@ -202,6 +252,13 @@ static float3 desaturateColor(float3 color, float amount) {
     float noiseStrengthScaled = noiseStrengthParam * (0.4 + 0.6 * energy);
     float3 noiseColor = float3(0.0);
     finalColor = mix(finalColor, noiseColor, noiseField * noiseStrengthScaled);
+    if (transitionElapsed >= 0.0) {
+        float3 goldFlash = mix(glowColor, float3(1.0, 0.87, 0.18), 0.62);
+        float3 whiteGoldFlash = mix(goldFlash, float3(1.0), 0.18);
+        float flashFill = smoothstep(0.58, 1.0, transitionT);
+        finalColor += goldFlash * transitionPulse * 0.22;
+        finalColor = mix(finalColor, whiteGoldFlash, clamp(flashFill * transitionExpand * 0.78, 0.0, 1.0));
+    }
 
     return half4(half3(finalColor), half(1.0)) * color.a;
 }
